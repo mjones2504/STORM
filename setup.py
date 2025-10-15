@@ -117,6 +117,7 @@ if CUTLASS_AVAILABLE:
         "--expt-relaxed-constexpr",
         "--expt-extended-lambda",
         "-Xcompiler", "-fPIC",
+        "-Xcompiler", "-std=c++17",
     ])
     
     # Add CUDA architecture flags for Tensor Cores if available

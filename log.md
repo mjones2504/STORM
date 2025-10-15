@@ -137,3 +137,34 @@ The STORM MVP is now complete with full educational materials, working demonstra
 - **Bandwidth Reduction**: 30-50% VRAM bandwidth usage reduction
 
 **Next Steps**: Test in Google Colab environment to validate CUTLASS integration and measure performance improvements.
+
+### Current Session: Fixing CUTLASS Compilation Issues
+
+**Date**: Current session
+**Objective**: Resolve compilation errors with CUTLASS integration in Google Colab
+
+**Issue Identified**: 
+- CUTLASS is detected correctly at `/root/StormV2/cutlass/include`
+- Compilation fails during `pip install -e .` due to complex CUTLASS header dependencies
+- Need to properly configure CUTLASS include paths and compiler flags
+
+**Fixes Applied**:
+1. **Restored CUTLASS Support**: Re-enabled CUTLASS compilation in `setup.py`
+2. **Enhanced Compiler Flags**: Added proper CUTLASS-specific flags including `-Xcompiler -std=c++17`
+3. **Updated Bindings**: Modified `storm_bindings.cpp` to include conditional CUTLASS headers
+4. **Fallback Implementation**: Added fallback to PyTorch when CUTLASS is not available
+
+**Technical Changes**:
+- **setup.py**: Re-enabled CUTLASS compilation with proper include paths and compiler flags
+- **storm_bindings.cpp**: Added conditional CUTLASS includes and `StormGEMMTensor` class
+- **Compiler Flags**: Added `-Xcompiler -std=c++17` for proper C++17 support with CUTLASS
+
+**Expected Resolution**: 
+- CUTLASS headers should compile correctly with proper include paths
+- `StormGEMMTensor` class will be available for GEMM optimization
+- Fallback to PyTorch when CUTLASS is not available
+
+**Next Steps**: 
+1. Test compilation in Google Colab with `pip install -e . --force-reinstall`
+2. Verify CUTLASS integration with `storm_cuda.storm.StormGEMMTensor.is_cutlass_available()`
+3. Run benchmark tests to measure performance improvements

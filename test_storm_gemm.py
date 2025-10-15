@@ -110,7 +110,7 @@ def test_gemm_accuracy():
     input_tensor, weight_tensor, bias_tensor = create_test_data()
     
     # PyTorch baseline
-    pytorch_output = torch.linear(input_tensor, weight_tensor, bias_tensor)
+    pytorch_output = torch.nn.functional.linear(input_tensor, weight_tensor, bias_tensor)
     
     # STORM CUTLASS GEMM (if available)
     if cutlass_available:
