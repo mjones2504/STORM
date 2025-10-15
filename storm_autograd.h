@@ -6,6 +6,7 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <cuda_runtime.h>
 #include "storm_core.h"
+#include "storm_gemm.h"
 
 /**
  * STORM Autograd Functions
@@ -44,14 +45,23 @@ public:
         torch::Tensor input,
         torch::Tensor weight,
         torch::Tensor bias,
-        int layer_id
+        int layer_id,
+        bool use_custom_gemm = true
     ) {
         // Store inputs for backward pass
         ctx->save_for_backward({input, weight, bias});
         ctx->saved_data["layer_id"] = layer_id;
+        ctx->saved_data["use_custom_gemm"] = use_custom_gemm;
         
-        // Perform the forward computation
-        torch::Tensor output = torch::linear(input, weight, bias);
+        // Perform the forward computation with STORM GEMM optimization
+        torch::Tensor output;
+        if (use_custom_gemm && StormGEMMTensor::is_cutlass_available()) {
+            // Use STORM CUTLASS GEMM for bandwidth optimization
+            output = StormGEMMTensor::storm_linear(input, weight, bias);
+        } else {
+            // Fallback to PyTorch linear operation
+            output = torch::linear(input, weight, bias);
+        }
         
         // Create activation tensor for offloading
         torch::Tensor activation = output.clone();
@@ -76,6 +86,7 @@ public:
         auto weight = saved[1];
         auto bias = saved[2];
         int layer_id = ctx->saved_data["layer_id"].toInt();
+        bool use_custom_gemm = ctx->saved_data["use_custom_gemm"].toBool();
         
         // Get gradient from output
         auto grad_output = grad_outputs[0];
@@ -86,9 +97,17 @@ public:
         // Fetch activation from CPU RAM asynchronously
         auto activation = fetch_activation_from_cpu(layer_id, storm_system.get());
         
-        // Compute gradients
-        auto grad_input = torch::linear(grad_output, weight.t(), torch::Tensor());
-        auto grad_weight = torch::mm(grad_output.t(), input);
+        // Compute gradients with STORM GEMM optimization
+        torch::Tensor grad_input, grad_weight;
+        if (use_custom_gemm && StormGEMMTensor::is_cutlass_available()) {
+            // Use STORM CUTLASS GEMM for gradient computation
+            grad_input = StormGEMMTensor::storm_linear(grad_output, weight.t(), torch::Tensor());
+            grad_weight = StormGEMMTensor::storm_linear(grad_output.t(), input, torch::Tensor());
+        } else {
+            // Fallback to PyTorch operations
+            grad_input = torch::linear(grad_output, weight.t(), torch::Tensor());
+            grad_weight = torch::mm(grad_output.t(), input);
+        }
         auto grad_bias = grad_output.sum(0);
         
         return {grad_input, grad_weight, grad_bias, torch::Tensor()};
@@ -187,13 +206,14 @@ public:
         register_module("linear", linear_);
     }
     
-    torch::Tensor forward(torch::Tensor input) {
-        // Use our custom autograd function
+    torch::Tensor forward(torch::Tensor input, bool use_custom_gemm = true) {
+        // Use our custom autograd function with STORM GEMM optimization
         return StormForwardFunction::apply(
             input, 
             linear_->weight, 
             linear_->bias, 
-            layer_id_
+            layer_id_,
+            use_custom_gemm
         );
     }
 };

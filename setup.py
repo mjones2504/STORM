@@ -83,6 +83,58 @@ include_dirs = [
     torch.utils.cpp_extension.include_paths(),
 ]
 
+# CUTLASS support detection
+CUTLASS_AVAILABLE = False
+CUTLASS_INCLUDE_DIR = None
+
+# Try to find CUTLASS installation
+possible_cutlass_paths = [
+    "/usr/local/cuda/include/cutlass",
+    "/opt/cutlass/include",
+    "/usr/include/cutlass",
+    os.path.expanduser("~/cutlass/include"),
+    os.path.expanduser("~/CUTLASS/include"),
+    os.path.join(os.getcwd(), "cutlass", "include"),
+    os.path.join(os.getcwd(), "CUTLASS", "include"),
+]
+
+for path in possible_cutlass_paths:
+    if os.path.exists(os.path.join(path, "cutlass", "cutlass.h")):
+        CUTLASS_INCLUDE_DIR = path
+        CUTLASS_AVAILABLE = True
+        print(f"CUTLASS found at: {path}")
+        break
+
+if CUTLASS_AVAILABLE:
+    include_dirs.append(CUTLASS_INCLUDE_DIR)
+    cpp_flags.append("-DCUTLASS_ENABLED")
+    cuda_flags.append("-DCUTLASS_ENABLED")
+    
+    # CUTLASS-specific compiler flags for optimal performance
+    cuda_flags.extend([
+        "-DCUTLASS_ENABLE_TENSOR_CORE_MMA",
+        "-DCUTLASS_NAMESPACE=cutlass",
+        "--expt-relaxed-constexpr",
+        "--expt-extended-lambda",
+        "-Xcompiler", "-fPIC",
+    ])
+    
+    # Add CUDA architecture flags for Tensor Cores if available
+    if CUDA_VERSION and CUDA_VERSION >= "11.0":
+        cuda_flags.extend([
+            "-gencode", "arch=compute_75,code=sm_75",  # RTX 20xx series
+            "-gencode", "arch=compute_80,code=sm_80",  # A100
+            "-gencode", "arch=compute_86,code=sm_86",  # RTX 30xx series
+        ])
+    
+    print("CUTLASS support enabled - STORM GEMM optimization available")
+    print("  - Tensor Core MMA enabled")
+    print("  - Shared memory tiling optimized")
+    print("  - Bandwidth reduction target: 30-50%")
+else:
+    print("CUTLASS not found - STORM will use PyTorch fallback for GEMM operations")
+    print("To enable CUTLASS optimization, install CUTLASS and ensure it's in the include path")
+
 # Library directories
 library_dirs = []
 if CUDA_AVAILABLE:
