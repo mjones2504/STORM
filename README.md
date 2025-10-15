@@ -23,13 +23,25 @@ STORM/
 ├── storm_autograd.h           # PyTorch autograd functions
 ├── storm_orchestration.h      # Advanced memory orchestration
 ├── storm_profiling.h          # NVIDIA profiling integration
-├── CMakeLists.txt             # Build configuration
+├── storm_bindings.cpp         # Python bindings (entry point)
+├── setup.py                   # PyTorch extension setup
+├── test_storm.py              # Python test script
+├── CMakeLists.txt             # CMake build configuration
 ├── storm.md                   # Technical blueprint
 ├── final.md                   # Detailed specifications
 ├── cpp_learning_guide.md      # C++ fundamentals guide
 ├── pytorch_integration_guide.md # Advanced PyTorch concepts
 └── log.md                     # Development progress
 ```
+
+## 🏗️ Architecture
+
+STORM uses a **header-only implementation** approach:
+
+- **Header Files** (`.h`): Contain complete class implementations
+- **Python Bindings** (`.cpp`): Minimal entry point for PyTorch integration
+- **Setup Script** (`setup.py`): Handles compilation and installation
+- **Dual Build Support**: Both PyTorch extension and standalone CMake builds
 
 ## 🛠️ Requirements
 
@@ -45,9 +57,25 @@ STORM/
 
 ## 🔧 Building STORM
 
+### Method 1: PyTorch Extension (Recommended)
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/STORM.git
+git clone https://github.com/mjones2504/STORM.git
+cd STORM
+
+# Install as PyTorch extension
+pip install -e .
+
+# Test the installation
+python test_storm.py
+```
+
+### Method 2: CMake Build (Standalone)
+
+```bash
+# Clone the repository
+git clone https://github.com/mjones2504/STORM.git
 cd STORM
 
 # Create build directory
@@ -62,6 +90,18 @@ make -j$(nproc)
 
 ## 🚀 Running STORM
 
+### Python Usage
+```python
+import torch
+import storm  # After pip install
+
+# Initialize STORM system
+storm_system = storm.StormSystem()
+if storm_system.initialize():
+    print("STORM system ready!")
+```
+
+### Standalone C++ Usage
 ```bash
 # Run the demonstration
 ./storm
