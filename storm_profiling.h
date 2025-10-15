@@ -68,8 +68,8 @@ public:
         profiling_data_.clear();
         
 #ifdef NVTX_ENABLED
-        // Initialize NVIDIA profiling
-        nvtxInitialize();
+        // Initialize NVIDIA profiling (new API signature)
+        nvtxInitialize(nullptr);
         std::cout << "STORM Profiling started - NVIDIA tools integration active" << std::endl;
 #else
         std::cout << "STORM Profiling started - Basic profiling mode" << std::endl;
@@ -163,7 +163,7 @@ public:
     };
     
     ProfilingStats getProfilingStats() const {
-        std::lock_guard<std::mutex> lock(profiling_mutex_);
+        std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(profiling_mutex_));
         
         ProfilingStats stats = {0.0, 0.0, 0.0, 0.0, 0, 0, false};
         
@@ -240,6 +240,7 @@ public:
     
     // Export profiling data for external analysis
     void exportProfilingData(const std::string& filename) const {
+        std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(profiling_mutex_));
         std::ofstream file(filename);
         if (!file.is_open()) {
             std::cerr << "Failed to open file for profiling data export" << std::endl;
@@ -248,7 +249,6 @@ public:
         
         file << "Operation,StartTime,EndTime,Duration,VRAMUsed,VRAMTotal\n";
         
-        std::lock_guard<std::mutex> lock(profiling_mutex_);
         for (const auto& data : profiling_data_) {
             auto start_ms = std::chrono::duration_cast<std::chrono::microseconds>(
                 data.start_time.time_since_epoch()

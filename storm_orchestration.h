@@ -211,7 +211,7 @@ public:
     
     // Check if activation exists in cache
     bool hasActivation(int layer_id) const {
-        std::lock_guard<std::mutex> lock(cache_mutex_);
+        std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(cache_mutex_));
         return cache_.find(layer_id) != cache_.end();
     }
     
@@ -223,7 +223,7 @@ public:
     };
     
     CacheStats getStats() const {
-        std::lock_guard<std::mutex> lock(cache_mutex_);
+        std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(cache_mutex_));
         return CacheStats{
             cache_.size(),
             current_cache_size_,
@@ -315,7 +315,7 @@ public:
     
     // Get current metrics
     PerformanceMetrics getMetrics() const {
-        std::lock_guard<std::mutex> lock(metrics_mutex_);
+        std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(metrics_mutex_));
         return metrics_;
     }
     
