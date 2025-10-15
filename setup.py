@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 STORM - Synchronous Transfer Orchestration for RAM Memory
-PyTorch C++/CUDA Extension Setup
+PyTorch C++/CUDA Extension Setup with Automatic CUTLASS Installation
 
 This setup.py file configures the compilation of STORM's C++/CUDA code
 into a Python extension that can be imported and used with PyTorch.
 
 Key Features:
 - Automatic CUDA compilation with nvcc
+- Automatic CUTLASS installation and configuration
 - C++17 standard support
 - Optional NVIDIA profiling tools integration
 - Cross-platform compatibility
@@ -17,8 +18,11 @@ Key Features:
 import os
 import sys
 import torch
+import subprocess
+import shutil
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CppExtension
 from setuptools import setup, find_packages
+from setuptools.command.build_ext import build_ext
 import platform
 
 # Check PyTorch version
@@ -41,6 +45,57 @@ if CUDA_AVAILABLE:
 IS_WINDOWS = platform.system() == "Windows"
 IS_LINUX = platform.system() == "Linux"
 IS_MACOS = platform.system() == "Darwin"
+
+def install_cutlass():
+    """Automatically install CUTLASS if not found"""
+    print("Checking for CUTLASS installation...")
+    
+    # Check if CUTLASS is already available
+    possible_cutlass_paths = [
+        "/usr/local/cuda/include/cutlass",
+        "/opt/cutlass/include",
+        "/usr/include/cutlass",
+        os.path.expanduser("~/cutlass/include"),
+        os.path.expanduser("~/CUTLASS/include"),
+        os.path.join(os.getcwd(), "cutlass", "include"),
+        os.path.join(os.getcwd(), "CUTLASS", "include"),
+        os.path.join(os.getcwd(), "content", "cutlass", "include"),
+    ]
+    
+    for path in possible_cutlass_paths:
+        if os.path.exists(os.path.join(path, "cutlass", "cutlass.h")):
+            print(f"[OK] CUTLASS found at: {path}")
+            return path
+    
+    # Try to install CUTLASS automatically
+    print("[INFO] CUTLASS not found, attempting automatic installation...")
+    
+    try:
+        # Create cutlass directory
+        cutlass_dir = os.path.join(os.getcwd(), "cutlass")
+        if not os.path.exists(cutlass_dir):
+            os.makedirs(cutlass_dir)
+        
+        # Clone CUTLASS repository
+        print("[INFO] Cloning CUTLASS repository...")
+        subprocess.run([
+            "git", "clone", "https://github.com/NVIDIA/cutlass.git", cutlass_dir
+        ], check=True, capture_output=True)
+        
+        print("[OK] CUTLASS installed successfully!")
+        return os.path.join(cutlass_dir, "include")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] Failed to install CUTLASS automatically: {e}")
+        print("Please install CUTLASS manually or set CUTLASS_ROOT environment variable")
+        return None
+    except Exception as e:
+        print(f"[ERROR] Unexpected error during CUTLASS installation: {e}")
+        return None
+
+# Install CUTLASS if needed
+CUTLASS_INCLUDE_DIR = install_cutlass()
+CUTLASS_AVAILABLE = CUTLASS_INCLUDE_DIR is not None
 
 # Compiler flags
 cpp_flags = [
@@ -83,28 +138,7 @@ include_dirs = [
     torch.utils.cpp_extension.include_paths(),
 ]
 
-# CUTLASS support detection
-CUTLASS_AVAILABLE = False
-CUTLASS_INCLUDE_DIR = None
-
-# Try to find CUTLASS installation
-possible_cutlass_paths = [
-    "/usr/local/cuda/include/cutlass",
-    "/opt/cutlass/include",
-    "/usr/include/cutlass",
-    os.path.expanduser("~/cutlass/include"),
-    os.path.expanduser("~/CUTLASS/include"),
-    os.path.join(os.getcwd(), "cutlass", "include"),
-    os.path.join(os.getcwd(), "CUTLASS", "include"),
-]
-
-for path in possible_cutlass_paths:
-    if os.path.exists(os.path.join(path, "cutlass", "cutlass.h")):
-        CUTLASS_INCLUDE_DIR = path
-        CUTLASS_AVAILABLE = True
-        print(f"CUTLASS found at: {path}")
-        break
-
+# Add CUTLASS support
 if CUTLASS_AVAILABLE:
     include_dirs.append(CUTLASS_INCLUDE_DIR)
     cpp_flags.append("-DCUTLASS_ENABLED")
@@ -128,13 +162,12 @@ if CUTLASS_AVAILABLE:
             "-gencode", "arch=compute_86,code=sm_86",  # RTX 30xx series
         ])
     
-    print("CUTLASS support enabled - STORM GEMM optimization available")
+    print("[OK] CUTLASS support enabled - STORM GEMM optimization available")
     print("  - Tensor Core MMA enabled")
     print("  - Shared memory tiling optimized")
     print("  - Bandwidth reduction target: 30-50%")
 else:
-    print("CUTLASS not found - STORM will use PyTorch fallback for GEMM operations")
-    print("To enable CUTLASS optimization, install CUTLASS and ensure it's in the include path")
+    print("[WARNING] CUTLASS not available - STORM will use PyTorch fallback for GEMM operations")
 
 # Library directories
 library_dirs = []
@@ -163,9 +196,10 @@ if NVTX_AVAILABLE:
 # Define the STORM extension
 extensions = []
 
-# Main STORM extension - using header-only implementation
+# Main STORM extension sources
 storm_sources = [
-    "storm_bindings.cpp",  # Python bindings (this will be the main entry point)
+    "storm_bindings.cpp",
+    "storm_cutlass.cu",  # CUTLASS-specific CUDA code
 ]
 
 # Check if we have the bindings file
