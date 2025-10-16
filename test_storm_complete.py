@@ -127,44 +127,57 @@ def storm_large_workload(input_tensor, weight_tensor, bias_tensor, num_layers=8)
             layer_output = output.view(batch_size, seq_len, hidden_size)
             layer_output = torch.relu(layer_output)
             
-            # Store in CPU RAM to free VRAM
-            cpu_activation = layer_output.cpu()
+            print(f"[DEBUG] Layer {i}: GPU tensor shape: {layer_output.shape}")
+            print(f"[DEBUG] Layer {i}: GPU tensor elements: {layer_output.numel()}")
+            
+            # CRITICAL FIX: Store tensor with explicit shape preservation
+            # Convert to CPU while preserving the exact tensor structure
+            cpu_activation = layer_output.detach().cpu().clone()
             cpu_activations.append(cpu_activation)
             
-            print(f"[DEBUG] Layer {i}: GPU tensor elements: {layer_output.numel()}")
+            print(f"[DEBUG] Layer {i}: CPU tensor shape: {cpu_activation.shape}")
             print(f"[DEBUG] Layer {i}: CPU tensor elements: {cpu_activation.numel()}")
+            
+            # Verify CPU tensor integrity
+            if cpu_activation.numel() != layer_output.numel():
+                raise RuntimeError(f"CPU transfer corrupted tensor: GPU had {layer_output.numel()} elements, CPU has {cpu_activation.numel()}")
             
             # Clean up GPU memory
             del layer_output
             torch.cuda.empty_cache()
             
-            # Move next input to GPU (Crucial Reconstitution Step)
+            # Move next input to GPU (CRITICAL FIX: Preserve exact shape)
             if i < num_layers - 1:
-                # Get the element count needed for the next layer's computation
-                required_elements = original_shape[0] * original_shape[1] * original_shape[2]
+                # Get the CPU tensor and restore to GPU with exact shape
+                cpu_tensor = cpu_activations[i]
+                print(f"[DEBUG] Retrieving CPU tensor: {cpu_tensor.shape}, {cpu_tensor.numel()} elements")
                 
-                print(f"[DEBUG] Required elements for next layer: {required_elements}")
-                print(f"[DEBUG] CPU activation elements: {cpu_activations[i].numel()}")
+                # Move back to GPU and ensure correct shape
+                current_tensor = cpu_tensor.cuda()
                 
-                # If the CPU activation does NOT contain the required number of elements,
-                # the transfer must have failed or the initial tensor definition was flawed.
-                if cpu_activations[i].numel() != required_elements:
-                    raise RuntimeError(f"Data corruption: Expected {required_elements} elements, got {cpu_activations[i].numel()}. "
-                                    f"Element count mismatch by factor of {required_elements / cpu_activations[i].numel():.1f}")
-                
-                # The actual fix is to bring the tensor back and then explicitly reshape it.
-                current_tensor = cpu_activations[i].cuda()
-                current_tensor = current_tensor.view(original_shape)
+                # CRITICAL: Verify the tensor has the correct shape after GPU transfer
+                if current_tensor.shape != (batch_size, seq_len, hidden_size):
+                    print(f"[WARNING] Shape mismatch after GPU transfer: {current_tensor.shape} vs expected {(batch_size, seq_len, hidden_size)}")
+                    # Force correct shape
+                    current_tensor = current_tensor.view(batch_size, seq_len, hidden_size)
                 
                 print(f"[DEBUG] Restored tensor shape: {current_tensor.shape}")
                 print(f"[DEBUG] Restored tensor elements: {current_tensor.numel()}")
+                
+                # Final verification
+                if current_tensor.numel() != original_shape[0] * original_shape[1] * original_shape[2]:
+                    raise RuntimeError(f"Final tensor size mismatch: Expected {original_shape[0] * original_shape[1] * original_shape[2]} elements, got {current_tensor.numel()}")
         
-        # Return final result
+        # Return final result with explicit shape restoration
         final_result = cpu_activations[-1].cuda()
-        return final_result.view(original_shape)
+        final_result = final_result.view(original_shape)
+        
+        print(f"[DEBUG] Final result shape: {final_result.shape}")
+        print(f"[DEBUG] Final result elements: {final_result.numel()}")
+        
+        return final_result
     except RuntimeError as e:
-        print(f"[ERROR] STORM large workload failed: The memory buffer size is incorrect. "
-              f"Please verify the initial tensor size and total element count. Error detail: {e}")
+        print(f"[ERROR] STORM large workload failed: {e}")
         return None
 
 def intelligent_storm(input_tensor, weight_tensor, bias_tensor, num_layers=8):
