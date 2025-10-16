@@ -110,8 +110,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // CUDA Stream class for concurrent operations
     py::class_<storm::CUDAStream>(storm_module, "CUDAStream")
         .def(py::init<>())
-        .def("synchronize", &storm::CUDAStream::synchronize)
-        .def("get", &storm::CUDAStream::get, "Get CUDA stream handle");
+        .def("synchronize", &storm::CUDAStream::synchronize);
 
     // Layer Event Manager for orchestration
     py::class_<storm::LayerEventManager>(storm_module, "LayerEventManager")

@@ -67,12 +67,12 @@ def storm_activation_storage(input_tensor, weight_tensor, bias_tensor, num_layer
     current = input_tensor
     
     # Create separate streams for compute and transfer
-    compute_stream = storm_cuda.storm.CUDAStream()
-    transfer_stream = storm_cuda.storm.CUDAStream()
+    compute_stream = torch.cuda.Stream()
+    transfer_stream = torch.cuda.Stream()
     
     for i in range(num_layers):
         # Compute on compute stream
-        with torch.cuda.stream(compute_stream.get()):
+        with torch.cuda.stream(compute_stream):
             batch_size, seq_len, hidden_size = current.shape
             reshaped = current.view(-1, hidden_size)
             output = storm_cuda.storm.StormGEMMTensor.storm_linear(
@@ -82,7 +82,7 @@ def storm_activation_storage(input_tensor, weight_tensor, bias_tensor, num_layer
         
         # Concurrent: transfer previous activation while computing
         if i > 0:
-            with torch.cuda.stream(transfer_stream.get()):
+            with torch.cuda.stream(transfer_stream):
                 activations.append(prev_output.cpu())
         
         prev_output = layer_output
