@@ -111,6 +111,7 @@ def storm_large_workload(input_tensor, weight_tensor, bias_tensor, num_layers=8)
     try:
         current_tensor = input_tensor
         cpu_activations = []
+        original_shape = current_tensor.shape  # Save original shape
         
         for i in range(num_layers):
             batch_size, seq_len, hidden_size = current_tensor.shape
@@ -130,15 +131,15 @@ def storm_large_workload(input_tensor, weight_tensor, bias_tensor, num_layers=8)
             del layer_output
             torch.cuda.empty_cache()
             
-            # Move next input to GPU (preserve original shape)
+            # Move next input to GPU (CRITICAL FIX: explicitly restore shape)
             if i < num_layers - 1:
                 current_tensor = cpu_activations[i].cuda()
-                # Ensure the tensor maintains the correct shape
-                if current_tensor.shape != (batch_size, seq_len, hidden_size):
-                    current_tensor = current_tensor.view(batch_size, seq_len, hidden_size)
+                # CRITICAL: The tensor comes back as 1D, must reshape to original 3D
+                current_tensor = current_tensor.view(batch_size, seq_len, hidden_size)
         
-        # Return final result
-        return cpu_activations[-1].cuda()
+        # Return final result with explicit shape restoration
+        final_result = cpu_activations[-1].cuda()
+        return final_result.view(original_shape)
     except RuntimeError as e:
         print(f"[ERROR] STORM large workload failed: {e}")
         return None
