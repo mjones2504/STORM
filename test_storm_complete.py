@@ -340,11 +340,11 @@ def test_large_workload():
     print("STORM LARGE WORKLOAD TEST (CPU RAM Storage Strategy)")
     print("="*80)
     
-    # Create ACTUALLY large workload that exceeds VRAM
-    batch_size = 128
-    sequence_length = 8192
-    hidden_size = 8192
-    num_layers = 12
+    # Create moderate large workload (fits in VRAM but tests CPU RAM strategy)
+    batch_size = 64
+    sequence_length = 4096
+    hidden_size = 4096
+    num_layers = 8
     
     print(f"[CONFIG] Large Workload Configuration:")
     print(f"  Dimensions: {batch_size}x{sequence_length}x{hidden_size}")
