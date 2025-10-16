@@ -1,4 +1,7 @@
 Streaming output truncated to the last 5000 lines.
+                 from storm_gemm.h:15,
+                 from storm_bindings.cpp:13:
+/content/STORM/cutlass/include/cutlass/barrier.h:144: warning: ignoring ‘#pragma unroll ’ [-Wunknown-pragmas]
   144 |         #pragma unroll 1
       | 
 /content/STORM/cutlass/include/cutlass/barrier.h:160: warning: ignoring ‘#pragma unroll ’ [-Wunknown-pragmas]
@@ -4869,35 +4872,50 @@ In file included from /content/STORM/cutlass/include/cutlass/gemm/device/gemm_un
       |         ^~~~~~~~~~~~~
 In file included from storm_bindings.cpp:13:
 storm_gemm.h: In static member function ‘static cudaError_t storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::execute(const Element*, const Element*, Element*, int, int, int, Element, Element, cudaStream_t)’:
-storm_gemm.h:161:20: error: ‘cudaErrorLaunchFailed’ was not declared in this scope; did you mean ‘cudaErrorLaunchFailure’?
-  161 |             return cudaErrorLaunchFailed;
-      |                    ^~~~~~~~~~~~~~~~~~~~~
-      |                    cudaErrorLaunchFailure
+storm_gemm.h:107:32: error: expected primary-expression before ‘<’ token
+  107 |         optimized_gemm_kernel<<<grid, block,
+      |                                ^
+storm_gemm.h:109:21: error: expected primary-expression before ‘>’ token
+  109 |             stream>>>(
+      |                     ^
+storm_gemm.h: In member function ‘void storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::optimized_gemm_kernel(const Element*, const Element*, Element*, int, int, int, Element, Element)’:
+storm_gemm.h:139:18: error: ‘threadIdx’ was not declared in this scope
+  139 |         int tx = threadIdx.x;
+      |                  ^~~~~~~~~
+storm_gemm.h:141:18: error: ‘blockIdx’ was not declared in this scope
+  141 |         int bx = blockIdx.x;
+      |                  ^~~~~~~~
+storm_gemm.h:168:13: error: there are no arguments to ‘__syncthreads’ that depend on a template parameter, so a declaration of ‘__syncthreads’ must be available [-fpermissive]
+  168 |             __syncthreads();
+      |             ^~~~~~~~~~~~~
+storm_gemm.h:175:13: error: there are no arguments to ‘__syncthreads’ that depend on a template parameter, so a declaration of ‘__syncthreads’ must be available [-fpermissive]
+  175 |             __syncthreads();
+      |             ^~~~~~~~~~~~~
 storm_gemm.h: In static member function ‘static cudaError_t storm::StormGEMM::storm_gemm_with_bias(const float*, const float*, const float*, float*, int, int, int, cudaStream_t)’:
-storm_gemm.h:244:26: error: expected primary-expression before ‘<’ token
-  244 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
+storm_gemm.h:261:26: error: expected primary-expression before ‘<’ token
+  261 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
       |                          ^
-storm_gemm.h:244:51: error: expected primary-expression before ‘>’ token
-  244 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
+storm_gemm.h:261:51: error: expected primary-expression before ‘>’ token
+  261 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
       |                                                   ^
-storm_gemm.h:244:53: warning: left operand of comma operator has no effect [-Wunused-value]
-  244 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
+storm_gemm.h:261:53: warning: left operand of comma operator has no effect [-Wunused-value]
+  261 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
       |                                                     ^
-storm_gemm.h:244:62: warning: right operand of comma operator has no effect [-Wunused-value]
-  244 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
+storm_gemm.h:261:62: warning: right operand of comma operator has no effect [-Wunused-value]
+  261 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
       |                                                              ^
-storm_gemm.h:244:65: warning: right operand of comma operator has no effect [-Wunused-value]
-  244 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
+storm_gemm.h:261:65: warning: right operand of comma operator has no effect [-Wunused-value]
+  261 |         add_bias_kernel<<<grid, block, 0, stream>>>(C, bias, M, N);
       |                                                                 ^
-storm_gemm.h: In static member function ‘static void storm::StormGEMM::add_bias_kernel(float*, const float*, int, int)’:
-storm_gemm.h:261:19: error: ‘blockIdx’ was not declared in this scope
-  261 |         int col = blockIdx.x * blockDim.x + threadIdx.x;
+storm_gemm.h: In member function ‘void storm::StormGEMM::add_bias_kernel(float*, const float*, int, int)’:
+storm_gemm.h:278:19: error: ‘blockIdx’ was not declared in this scope
+  278 |         int col = blockIdx.x * blockDim.x + threadIdx.x;
       |                   ^~~~~~~~
-storm_gemm.h:261:32: error: ‘blockDim’ was not declared in this scope
-  261 |         int col = blockIdx.x * blockDim.x + threadIdx.x;
+storm_gemm.h:278:32: error: ‘blockDim’ was not declared in this scope
+  278 |         int col = blockIdx.x * blockDim.x + threadIdx.x;
       |                                ^~~~~~~~
-storm_gemm.h:261:45: error: ‘threadIdx’ was not declared in this scope
-  261 |         int col = blockIdx.x * blockDim.x + threadIdx.x;
+storm_gemm.h:278:45: error: ‘threadIdx’ was not declared in this scope
+  278 |         int col = blockIdx.x * blockDim.x + threadIdx.x;
       |                                             ^~~~~~~~~
 In file included from /usr/local/lib/python3.12/dist-packages/torch/include/torch/csrc/Exceptions.h:12,
                  from /usr/local/lib/python3.12/dist-packages/torch/include/torch/csrc/api/include/torch/python.h:11,
@@ -4917,59 +4935,34 @@ storm_bindings.cpp:129:75:   required from here
 /usr/local/lib/python3.12/dist-packages/torch/include/pybind11/pybind11.h: In instantiation of ‘class pybind11::class_<StormModel>’:
 storm_bindings.cpp:136:54:   required from here
 /usr/local/lib/python3.12/dist-packages/torch/include/pybind11/pybind11.h:1539:7: warning: ‘pybind11::class_<StormModel>’ declared with greater visibility than its base ‘pybind11::detail::generic_type’ [-Wattributes]
-In file included from storm_gemm.h:14,
-                 from storm_bindings.cpp:13:
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm.h: In instantiation of ‘class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’:
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:620:97:   recursively required by substitution of ‘template<class GemmKernel> struct cutlass::gemm::detail::IsCutlass3GemmKernel<GemmKernel, std::void_t<typename GemmKernel::ProblemShape> > [with GemmKernel = cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>]’
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:620:97:   required by substitution of ‘template<class GemmKernel_> class cutlass::gemm::device::GemmUniversalAdapter<GemmKernel_, typename std::enable_if<(! cutlass::gemm::detail::IsCutlass3GemmKernel<typename cutlass::GetUnderlyingKernel<T>::type>::value), void>::type> [with GemmKernel_ = cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>]’
-storm_gemm.h:115:43:   required from ‘static cudaError_t storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::execute(const Element*, const Element*, Element*, int, int, int, Element, Element, cudaStream_t) [with Element = float; LayoutA = cutlass::layout::RowMajor; LayoutB = cutlass::layout::ColumnMajor; LayoutC = cutlass::layout::RowMajor; cudaError_t = cudaError; cudaStream_t = CUstream_st*]’
-storm_gemm.h:203:60:   required from here
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm.h:264:9: error: invalid use of incomplete type ‘struct cutlass::gemm::kernel::DefaultGemm<float, cutlass::layout::RowMajor, 1, float, cutlass::layout::ColumnMajor, 1, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, false, cutlass::arch::OpMultiplyAdd, cutlass::gemm::SharedMemoryClearOption::kNone, false, false, false, cutlass::layout::NoPermute, cutlass::layout::NoPermute, cutlass::layout::NoPermute, void>’
-  264 |   using GemmKernel = typename kernel::DefaultGemm<
-      |         ^~~~~~~~~~
-In file included from /content/STORM/cutlass/include/cutlass/gemm/device/gemm.h:45,
-                 from storm_gemm.h:14,
-                 from storm_bindings.cpp:13:
-/content/STORM/cutlass/include/cutlass/gemm/kernel/default_gemm.h:139:8: note: declaration of ‘struct cutlass::gemm::kernel::DefaultGemm<float, cutlass::layout::RowMajor, 1, float, cutlass::layout::ColumnMajor, 1, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, false, cutlass::arch::OpMultiplyAdd, cutlass::gemm::SharedMemoryClearOption::kNone, false, false, false, cutlass::layout::NoPermute, cutlass::layout::NoPermute, cutlass::layout::NoPermute, void>’
-  139 | struct DefaultGemm;
-      |        ^~~~~~~~~~~
-In file included from storm_gemm.h:15,
-                 from storm_bindings.cpp:13:
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h: In instantiation of ‘class cutlass::gemm::device::GemmUniversalAdapter<cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>, void>’:
-storm_gemm.h:115:43:   required from ‘static cudaError_t storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::execute(const Element*, const Element*, Element*, int, int, int, Element, Element, cudaStream_t) [with Element = float; LayoutA = cutlass::layout::RowMajor; LayoutB = cutlass::layout::ColumnMajor; LayoutC = cutlass::layout::RowMajor; cudaError_t = cudaError; cudaStream_t = CUstream_st*]’
-storm_gemm.h:203:60:   required from here
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:630:9: error: no type named ‘Mma’ in ‘using GemmKernel = cutlass::GetUnderlyingKernel_t<cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute> >’ {aka ‘class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’}
-  630 |   using ThreadblockShape = typename GemmKernel::Mma::Shape;
-      |         ^~~~~~~~~~~~~~~~
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:635:9: error: no type named ‘Mma’ in ‘using GemmKernel = cutlass::GetUnderlyingKernel_t<cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute> >’ {aka ‘class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’}
-  635 |   using WarpMmaOperator = typename GemmKernel::Mma::Policy::Operator;
-      |         ^~~~~~~~~~~~~~~
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h: In instantiation of ‘const bool cutlass::gemm::device::GemmUniversalAdapter<cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>, void>::kInternalTranspose’:
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:645:9:   required from ‘class cutlass::gemm::device::GemmUniversalAdapter<cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>, void>’
-storm_gemm.h:115:43:   required from ‘static cudaError_t storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::execute(const Element*, const Element*, Element*, int, int, int, Element, Element, cudaStream_t) [with Element = float; LayoutA = cutlass::layout::RowMajor; LayoutB = cutlass::layout::ColumnMajor; LayoutC = cutlass::layout::RowMajor; cudaError_t = cudaError; cudaStream_t = CUstream_st*]’
-storm_gemm.h:203:60:   required from here
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:627:46: error: no type named ‘Epilogue’ in ‘using GemmKernel = cutlass::GetUnderlyingKernel_t<cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute> >’ {aka ‘class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’}
-  627 |     !cutlass::epilogue::threadblock::detail::is_2x_evt_v<typename GemmKernel::Epilogue> &&  // 2.x EVT does not require internal transpose
-      |      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-In file included from /content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:54,
-                 from storm_gemm.h:15,
-                 from storm_bindings.cpp:13:
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_base.h: In instantiation of ‘class cutlass::gemm::device::GemmUniversalBase<cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute> >’:
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:687:9:   required from ‘class cutlass::gemm::device::GemmUniversalAdapter<cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>, void>’
-storm_gemm.h:115:43:   required from ‘static cudaError_t storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::execute(const Element*, const Element*, Element*, int, int, int, Element, Element, cudaStream_t) [with Element = float; LayoutA = cutlass::layout::RowMajor; LayoutB = cutlass::layout::ColumnMajor; LayoutC = cutlass::layout::RowMajor; cudaError_t = cudaError; cudaStream_t = CUstream_st*]’
-storm_gemm.h:203:60:   required from here
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_base.h:75:9: error: no type named ‘Mma’ in ‘using GemmKernel = class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’ {aka ‘class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’}
-   75 |   using ThreadblockShape = typename GemmKernel::Mma::Shape;
-      |         ^~~~~~~~~~~~~~~~
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_base.h:93:9: error: no type named ‘Mma’ in ‘using GemmKernel = class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’ {aka ‘class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’}
-   93 |   using ElementAccumulator = typename GemmKernel::Mma::ElementC;
-      |         ^~~~~~~~~~~~~~~~~~
-In file included from /content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h:54,
-                 from storm_gemm.h:15,
-                 from storm_bindings.cpp:13:
-/content/STORM/cutlass/include/cutlass/gemm/device/gemm_universal_base.h:202:31: error: no type named ‘Params’ in ‘using GemmKernel = class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’ {aka ‘class cutlass::gemm::device::Gemm<float, cutlass::layout::RowMajor, float, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, cutlass::arch::OpClassSimt, cutlass::arch::Sm75, cutlass::gemm::GemmShape<64, 64, 8>, cutlass::gemm::GemmShape<8, 8, 8>, cutlass::gemm::GemmShape<4, 4, 2>, cutlass::epilogue::thread::LinearCombination<float, 1, float, float, cutlass::epilogue::thread::ScaleType::Default, cutlass::FloatRoundStyle::round_to_nearest, float>, cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, 2, 1, 1, false, cutlass::arch::OpMultiplyAdd, false, false, false, cutlass::layout::NoPermute>’}
-  202 |   typename GemmKernel::Params params_;
-      |                               ^~~~~~~
+In file included from storm_bindings.cpp:13:
+storm_gemm.h: In instantiation of ‘static cudaError_t storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::execute(const Element*, const Element*, Element*, int, int, int, Element, Element, cudaStream_t) [with Element = float; LayoutA = cutlass::layout::RowMajor; LayoutB = cutlass::layout::ColumnMajor; LayoutC = cutlass::layout::RowMajor; cudaError_t = cudaError; cudaStream_t = CUstream_st*]’:
+storm_gemm.h:220:60:   required from here
+storm_gemm.h:110:13: warning: left operand of comma operator has no effect [-Wunused-value]
+  110 |             A, B, C, M, N, K, alpha, beta
+      |             ^
+storm_gemm.h:110:17: warning: right operand of comma operator has no effect [-Wunused-value]
+  110 |             A, B, C, M, N, K, alpha, beta
+      |             ~~~~^~~
+storm_gemm.h:110:20: warning: right operand of comma operator has no effect [-Wunused-value]
+  110 |             A, B, C, M, N, K, alpha, beta
+      |             ~~~~~~~^~~
+storm_gemm.h:110:23: warning: right operand of comma operator has no effect [-Wunused-value]
+  110 |             A, B, C, M, N, K, alpha, beta
+      |             ~~~~~~~~~~^~~
+storm_gemm.h:110:26: warning: right operand of comma operator has no effect [-Wunused-value]
+  110 |             A, B, C, M, N, K, alpha, beta
+      |             ~~~~~~~~~~~~~^~~
+storm_gemm.h:110:29: warning: right operand of comma operator has no effect [-Wunused-value]
+  110 |             A, B, C, M, N, K, alpha, beta
+      |             ~~~~~~~~~~~~~~~~^~~~~~~
+storm_gemm.h:110:36: warning: right operand of comma operator has no effect [-Wunused-value]
+  109 |             stream>>>(
+      |                      ~              
+  110 |             A, B, C, M, N, K, alpha, beta
+      |             ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+  111 |         );
+      |         ~                           
 In file included from /usr/local/lib/python3.12/dist-packages/torch/include/torch/csrc/Exceptions.h:12,
                  from /usr/local/lib/python3.12/dist-packages/torch/include/torch/csrc/api/include/torch/python.h:11,
                  from /usr/local/lib/python3.12/dist-packages/torch/include/torch/extension.h:9,
@@ -4998,4 +4991,11 @@ storm_bindings.cpp:129:75:   required from here
 /usr/local/lib/python3.12/dist-packages/torch/include/pybind11/pybind11.h: In instantiation of ‘pybind11::class_< <template-parameter-1-1>, <template-parameter-1-2> >::class_(pybind11::handle, const char*, const Extra& ...) [with Extra = {}; type_ = StormModel; options = {}]’:
 storm_bindings.cpp:136:54:   required from here
 /usr/local/lib/python3.12/dist-packages/torch/include/pybind11/pybind11.h:1599:28: warning: ‘pybind11::class_<StormModel>::class_<>(pybind11::handle, const char*)::<lambda(pybind11::detail::internals&)>’ declared with greater visibility than the type of its field ‘pybind11::class_<StormModel>::class_<>(pybind11::handle, const char*)::<lambda(pybind11::detail::internals&)>::<record capture>’ [-Wattributes]
+In file included from storm_bindings.cpp:13:
+storm_gemm.h: In instantiation of ‘void storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::optimized_gemm_kernel(const Element*, const Element*, Element*, int, int, int, Element, Element) [with Element = float; LayoutA = cutlass::layout::RowMajor; LayoutB = cutlass::layout::ColumnMajor; LayoutC = cutlass::layout::RowMajor]’:
+storm_gemm.h:107:9:   required from ‘static cudaError_t storm::StormCUTLASSGEMM<Element, LayoutA, LayoutB, LayoutC>::execute(const Element*, const Element*, Element*, int, int, int, Element, Element, cudaStream_t) [with Element = float; LayoutA = cutlass::layout::RowMajor; LayoutB = cutlass::layout::ColumnMajor; LayoutC = cutlass::layout::RowMajor; cudaError_t = cudaError; cudaStream_t = CUstream_st*]’
+storm_gemm.h:220:60:   required from here
+storm_gemm.h:168:26: error: ‘__syncthreads’ was not declared in this scope
+  168 |             __syncthreads();
+      |             ~~~~~~~~~~~~~^~
 error: command '/usr/bin/x86_64-linux-gnu-g++' failed with exit code 1

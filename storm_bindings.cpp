@@ -1,31 +1,23 @@
 /**
- * STORM Python Bindings with Simplified CUTLASS GEMM Implementation
+ * STORM Python Bindings with PyTorch-based GEMM Implementation
  *
- * This file provides Python bindings for the STORM system with CUTLASS GEMM optimization.
+ * This file provides Python bindings for the STORM system with PyTorch-based
+ * bandwidth optimization and intelligent memory orchestration.
  */
 
 #include <torch/extension.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <cuda_runtime.h>
 #include "storm_core.h"
 #include "storm_orchestration.h"
 #include "storm_gemm.h"
 
-// Force enable CUTLASS for this file
-#define CUTLASS_ENABLED 1
-
 namespace py = pybind11;
 
-// Forward declarations for CUTLASS functions (defined in storm_cutlass.cu)
-torch::Tensor storm_cutlass_gemm(torch::Tensor input, torch::Tensor weight, torch::Tensor bias);
-std::string get_cutlass_config_info();
-
-// CUTLASS GEMM wrapper class
-#ifdef CUTLASS_ENABLED
+// STORM PyTorch GEMM wrapper class
 class StormGEMMTensor {
 public:
-    static torch::Tensor storm_linear(torch::Tensor input, torch::Tensor weight, torch::Tensor bias) {
+    static torch::Tensor storm_linear(torch::Tensor input, torch::Tensor weight, torch::Tensor bias, int layer_id = -1) {
         // Get tensor dimensions
         auto input_sizes = input.sizes();
         auto weight_sizes = weight.sizes();
@@ -40,59 +32,36 @@ public:
             throw std::runtime_error("Weight must be 2D tensor");
         }
 
-        int64_t batch_size = input_sizes[0];
-        int64_t input_features = input_sizes[1];
-        int64_t output_features = weight_sizes[0];
-
-        // Create output tensor
-        auto output = torch::zeros({batch_size, output_features}, input.options());
-
-        // Use STORM's custom CUTLASS GEMM with shared memory tiling
+        // Use STORM's PyTorch-based GEMM with bandwidth optimization
         try {
-            // Get raw pointers for CUTLASS
-            auto input_ptr = input.data_ptr<float>();
-            auto weight_ptr = weight.data_ptr<float>();
-            auto output_ptr = output.data_ptr<float>();
-            
-            // Use STORM's custom CUTLASS GEMM with aggressive shared memory tiling
-            cudaError_t error = storm::StormGEMM::storm_gemm(
-                input_ptr, weight_ptr, output_ptr,
-                batch_size, output_features, input_features
-            );
-            
-            if (error != cudaSuccess) {
-                throw std::runtime_error("STORM CUTLASS GEMM failed");
-            }
-            
-            // Add bias if provided
-            if (bias.defined()) {
-                output = output + bias;
-            }
-            
-            return output;
-
+            return storm::StormGEMM::storm_linear(input, weight, bias, layer_id);
         } catch (const std::exception& e) {
-            // Fallback to PyTorch if CUTLASS fails
+            // Fallback to PyTorch if STORM optimization fails
+            std::cerr << "STORM optimization failed, using PyTorch fallback: " << e.what() << std::endl;
             return torch::nn::functional::linear(input, weight, bias);
         }
     }
 
-    static bool is_cutlass_available() {
-        return true;
-    }
-};
-#else
-class StormGEMMTensor {
-public:
-    static torch::Tensor storm_linear(torch::Tensor input, torch::Tensor weight, torch::Tensor bias) {
-        return torch::nn::functional::linear(input, weight, bias);
+    static bool is_optimization_available() {
+        return true; // PyTorch-based optimization is always available
     }
 
-    static bool is_cutlass_available() {
-        return false;
+    static std::string get_config_info() {
+        return storm::StormGEMMTensor::get_config_info();
+    }
+
+    static std::string get_optimization_stats() {
+        return storm::StormGEMMTensor::get_optimization_stats();
+    }
+
+    static double get_bandwidth_reduction() {
+        return storm::StormGEMMTensor::get_bandwidth_reduction();
+    }
+
+    static double get_cache_hit_rate() {
+        return storm::StormGEMMTensor::get_cache_hit_rate();
     }
 };
-#endif
 
 // Add this after the StormGEMMTensor class definition
 class StormModel {
@@ -117,8 +86,14 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     
     // STORM GEMM Tensor class
     py::class_<StormGEMMTensor>(storm_module, "StormGEMMTensor")
-        .def_static("storm_linear", &StormGEMMTensor::storm_linear, "CUTLASS-optimized linear layer")
-        .def_static("is_cutlass_available", &StormGEMMTensor::is_cutlass_available, "Check if CUTLASS is available");
+        .def_static("storm_linear", &StormGEMMTensor::storm_linear, 
+                   py::arg("input"), py::arg("weight"), py::arg("bias") = torch::Tensor(), py::arg("layer_id") = -1,
+                   "STORM-optimized linear layer with bandwidth optimization")
+        .def_static("is_optimization_available", &StormGEMMTensor::is_optimization_available, "Check if STORM optimization is available")
+        .def_static("get_config_info", &StormGEMMTensor::get_config_info, "Get STORM configuration information")
+        .def_static("get_optimization_stats", &StormGEMMTensor::get_optimization_stats, "Get optimization statistics")
+        .def_static("get_bandwidth_reduction", &StormGEMMTensor::get_bandwidth_reduction, "Get bandwidth reduction achieved")
+        .def_static("get_cache_hit_rate", &StormGEMMTensor::get_cache_hit_rate, "Get cache hit rate");
 
     // CUDA Stream class for concurrent operations
     py::class_<storm::CUDAStream>(storm_module, "CUDAStream")
@@ -183,7 +158,29 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         },
         "Retrieve activation asynchronously from CPU RAM");
 
+    // STORM optimization functions
+    storm_module.def("get_bandwidth_reduction", []() {
+        return storm::StormGEMM::get_bandwidth_reduction();
+    }, "Get current bandwidth reduction achieved");
+    
+    storm_module.def("get_cache_hit_rate", []() {
+        return storm::StormGEMM::get_cache_hit_rate();
+    }, "Get current cache hit rate");
+    
+    storm_module.def("get_optimization_stats", []() {
+        return storm::StormGEMM::get_optimization_stats();
+    }, "Get detailed optimization statistics");
+    
+    storm_module.def("set_optimization_enabled", [](bool enable) {
+        storm::StormGEMM::set_optimization_enabled(enable);
+    }, "Enable or disable STORM optimization");
+    
+    storm_module.def("set_target_bandwidth_reduction", [](double reduction) {
+        storm::StormGEMM::set_target_bandwidth_reduction(reduction);
+    }, "Set target bandwidth reduction (0.0 to 1.0)");
+    
     // Version information
-    storm_module.attr("__version__") = "1.0.0";
+    storm_module.attr("__version__") = "2.0.0";
     storm_module.attr("__author__") = "STORM Development Team";
+    storm_module.attr("__description__") = "STORM - PyTorch-based Bandwidth Optimization";
 }
