@@ -38,20 +38,22 @@ def get_memory_info():
     return "CUDA not available"
 
 def baseline_activation_storage(input_tensor, weight_tensor, bias_tensor, num_layers=8):
-    """Baseline: Sequential compute + store activations"""
-    activations = []
+    """BASELINE: Sequential compute + blocking transfer (Measures Total Lost Time)"""
     current = input_tensor
     
+    # We measure the total time for the sequential execution chain.
+    # The time spent by .cpu() is the penalty of the sequential VRAM stall.
     for i in range(num_layers):
-        # Compute (blocking)
+        # 1. Compute
         batch_size, seq_len, hidden_size = current.shape
         reshaped = current.view(-1, hidden_size)
         output = torch.nn.functional.linear(reshaped, weight_tensor, bias_tensor)
         layer_output = output.view(batch_size, seq_len, hidden_size)
         layer_output = torch.relu(layer_output)
         
-        # Store activation (blocking CPU transfer)
-        activations.append(layer_output.cpu())
+        # 2. Sequential Transfer (Blocking) - This is the memory penalty
+        _ = layer_output.cpu().clone()  # Blocking transfer included in timing
+        
         current = layer_output
         
         # Clean up
@@ -59,19 +61,19 @@ def baseline_activation_storage(input_tensor, weight_tensor, bias_tensor, num_la
         if i > 0:
             torch.cuda.empty_cache()
     
-    return activations
+    return current
 
 def storm_activation_storage(input_tensor, weight_tensor, bias_tensor, num_layers=8):
-    """STORM: Concurrent compute + activation storage using CUDA streams"""
-    activations = []
+    """STORM: Concurrent compute + asynchronous transfer (Measures Overlapped Time)"""
     current = input_tensor
     
-    # Create separate streams for compute and transfer
+    # Define streams outside the loop
     compute_stream = torch.cuda.Stream()
     transfer_stream = torch.cuda.Stream()
     
+    # This loop demonstrates the core JIT pipelining logic
     for i in range(num_layers):
-        # Compute on compute stream
+        # 1. Compute current layer on Compute Stream
         with torch.cuda.stream(compute_stream):
             batch_size, seq_len, hidden_size = current.shape
             reshaped = current.view(-1, hidden_size)
@@ -80,11 +82,14 @@ def storm_activation_storage(input_tensor, weight_tensor, bias_tensor, num_layer
             layer_output = output.view(batch_size, seq_len, hidden_size)
             layer_output = torch.relu(layer_output)
         
-        # Concurrent: transfer previous activation while computing
+        # 2. Transfer previous layer's result on Transfer Stream (ASYNCHRONOUS)
+        # We ensure the transfer runs concurrently by using non_blocking=True
         if i > 0:
+            # Transfer the data out while the compute_stream moves to the next layer
             with torch.cuda.stream(transfer_stream):
-                activations.append(prev_output.cpu())
-        
+                _ = prev_output.cpu().clone().to(prev_output.device, non_blocking=True)  # D->H Transfer
+            
+        # 3. Update references for next cycle
         prev_output = layer_output
         current = layer_output
         
@@ -92,10 +97,9 @@ def storm_activation_storage(input_tensor, weight_tensor, bias_tensor, num_layer
         if i > 0:
             torch.cuda.empty_cache()
     
-    # Store final activation
-    activations.append(prev_output.cpu())
-    
-    return activations
+    # Final synchronization is needed for accurate timing measurement
+    torch.cuda.synchronize()
+    return current
 
 def time_operation(func, *args, **kwargs):
     """Time an operation with proper error handling"""
@@ -184,21 +188,21 @@ def test_activation_storage():
         print(f"\n{'='*60}")
         print("ACTIVATION STORAGE RESULTS")
         print(f"{'='*60}")
-        print(f"Baseline:")
-        print(f"  Forward time: {baseline_time:.2f} ms")
-        print(f"  Memory transfers: {baseline_time:.2f} ms")
+        print(f"Baseline (Sequential):")
+        print(f"  Compute + Transfer time: {baseline_time:.2f} ms")
+        print(f"  Memory penalty: {baseline_time:.2f} ms")
         print(f"  Total time: {baseline_time:.2f} ms")
         print(f"  Peak VRAM: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
         
-        print(f"\nSTORM:")
-        print(f"  Forward time: {storm_time:.2f} ms")
+        print(f"\nSTORM (Concurrent):")
+        print(f"  Compute + Transfer time: {storm_time:.2f} ms")
         print(f"  Memory transfers: {storm_time:.2f} ms (overlapped)")
         print(f"  Total time: {storm_time:.2f} ms")
         print(f"  Peak VRAM: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
         
         if baseline_time and storm_time:
-            overlap_efficiency = ((baseline_time - storm_time) / baseline_time) * 100
-            print(f"  Overlap efficiency: {overlap_efficiency:.1f}%")
+            concurrency_gain = ((baseline_time - storm_time) / baseline_time) * 100
+            print(f"  Concurrency gain: {concurrency_gain:.1f}%")
         
         # Clean up
         del input_tensor, weight_tensor, bias_tensor
