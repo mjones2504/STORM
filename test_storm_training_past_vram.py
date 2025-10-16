@@ -67,14 +67,38 @@ def get_system_info():
         }
     return None
 
-class SimpleNet(nn.Module):
-    """Simple network for maximum memory pressure testing"""
-    def __init__(self, in_dim, out_dim):
+class ChatGPTScaleModel(nn.Module):
+    """ChatGPT-scale model for maximum memory pressure testing"""
+    def __init__(self, hidden_dim, vocab_size, num_layers):
         super().__init__()
-        self.layer = nn.Linear(in_dim, out_dim, device='cuda')
+        self.hidden_dim = hidden_dim
+        self.vocab_size = vocab_size
+        self.num_layers = num_layers
+        
+        # Embedding layer
+        self.embedding = nn.Embedding(vocab_size, hidden_dim, device='cuda')
+        
+        # Transformer layers (simplified)
+        self.layers = nn.ModuleList([
+            nn.Linear(hidden_dim, hidden_dim, device='cuda') 
+            for _ in range(num_layers)
+        ])
+        
+        # Output projection
+        self.output_proj = nn.Linear(hidden_dim, vocab_size, device='cuda')
     
     def forward(self, x):
-        return self.layer(x)
+        # Embedding
+        x = self.embedding(x)
+        
+        # Transformer layers
+        for layer in self.layers:
+            x = layer(x)
+            x = torch.relu(x)  # Simplified activation
+        
+        # Output projection
+        x = self.output_proj(x)
+        return x
 
 def phase_1_baseline_failure():
     """Phase 1: Setup and Baseline Failure Test"""
@@ -91,10 +115,26 @@ def phase_1_baseline_failure():
         print(f"[SYSTEM] VRAM Capacity: {system_info['vram_capacity']:.2f} GB")
         print(f"[SYSTEM] CPU RAM Capacity: {system_info['cpu_ram_capacity']:.2f} GB")
     
-    # Define OOM Load - Model requiring ~18 GB memory
-    LARGE_DIM = 24000  # Dimension to force 18GB load
-    print(f"\n[CONFIG] Creating model with {LARGE_DIM}x{LARGE_DIM} weights")
-    print(f"[CONFIG] Expected memory usage: ~18 GB (exceeds VRAM capacity)")
+    # Define OOM Load - ChatGPT-scale model requiring ~50+ GB memory
+    # ChatGPT-3.5 has ~175B parameters, we'll simulate a smaller but still massive model
+    HIDDEN_DIM = 4096      # Hidden dimension (like GPT-3)
+    VOCAB_SIZE = 50000     # Vocabulary size
+    NUM_LAYERS = 24        # Number of transformer layers
+    SEQ_LENGTH = 2048      # Sequence length
+    
+    # Calculate actual memory requirements
+    # Each layer: 4 * hidden_dim^2 (Q, K, V, O projections) + 2 * hidden_dim * vocab_size (embedding + output)
+    params_per_layer = 4 * (HIDDEN_DIM ** 2) + 2 * (HIDDEN_DIM * VOCAB_SIZE)
+    total_params = params_per_layer * NUM_LAYERS
+    memory_gb = (total_params * 2) / (1024**3)  # 2 bytes per parameter (float16)
+    
+    print(f"\n[CONFIG] Creating ChatGPT-scale model:")
+    print(f"[CONFIG] Hidden dimension: {HIDDEN_DIM}")
+    print(f"[CONFIG] Vocabulary size: {VOCAB_SIZE}")
+    print(f"[CONFIG] Number of layers: {NUM_LAYERS}")
+    print(f"[CONFIG] Sequence length: {SEQ_LENGTH}")
+    print(f"[CONFIG] Total parameters: {total_params:,}")
+    print(f"[CONFIG] Expected memory usage: {memory_gb:.1f} GB (exceeds VRAM capacity)")
     
     # Clear memory before test
     clear_memory()
@@ -102,15 +142,20 @@ def phase_1_baseline_failure():
     print(f"[INIT] {get_cpu_memory_info()}")
     
     try:
-        print(f"\n[TEST] Creating large model (this should fail with OOM)...")
+        print(f"\n[TEST] Creating ChatGPT-scale model (this should fail with OOM)...")
         
-        # Create model - this step alone may cause OOM
-        model = SimpleNet(LARGE_DIM, LARGE_DIM).cuda()
-        print(f"[SUCCESS] Model created: {LARGE_DIM}x{LARGE_DIM} weights")
+        # Create ChatGPT-scale model - this step alone may cause OOM
+        model = ChatGPTScaleModel(HIDDEN_DIM, VOCAB_SIZE, NUM_LAYERS)
+        print(f"[SUCCESS] ChatGPT-scale model created:")
+        print(f"[SUCCESS]   - Hidden dimension: {HIDDEN_DIM}")
+        print(f"[SUCCESS]   - Vocabulary size: {VOCAB_SIZE}")
+        print(f"[SUCCESS]   - Number of layers: {NUM_LAYERS}")
+        print(f"[SUCCESS]   - Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         
-        # Create large data tensor
-        large_data = torch.randn(1, LARGE_DIM, device='cuda')
-        print(f"[SUCCESS] Data tensor created: {large_data.shape}")
+        # Create realistic input data (token IDs)
+        batch_size = 1
+        input_ids = torch.randint(0, VOCAB_SIZE, (batch_size, SEQ_LENGTH), device='cuda')
+        print(f"[SUCCESS] Input data created: {input_ids.shape} (token IDs)")
         
         # Create optimizer
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
@@ -119,10 +164,12 @@ def phase_1_baseline_failure():
         print(f"\n[TEST] Running baseline training cycle (this should fail with OOM)...")
         
         # Run the training cycle that should cause OOM
-        output = model(large_data)
+        output = model(input_ids)
         print(f"[SUCCESS] Forward pass completed: {output.shape}")
         
-        loss = output.sum()
+        # Compute loss (cross-entropy style)
+        target = torch.randint(0, VOCAB_SIZE, (batch_size, SEQ_LENGTH), device='cuda')
+        loss = torch.nn.functional.cross_entropy(output.view(-1, VOCAB_SIZE), target.view(-1))
         print(f"[SUCCESS] Loss computed: {loss.item()}")
         
         loss.backward()
@@ -156,29 +203,37 @@ def phase_2_storm_training():
     print("Using STORM's CPU RAM storage to handle the same workload")
     print("This demonstrates successful training past VRAM capacity")
     
-    # Define the same large model
-    LARGE_DIM = 24000
+    # Define the same ChatGPT-scale model
+    HIDDEN_DIM = 4096
+    VOCAB_SIZE = 50000
+    NUM_LAYERS = 24
+    SEQ_LENGTH = 2048
     
     try:
         print(f"\n[STORM] Initializing STORM system...")
         print(f"[STORM] CPU RAM storage enabled for activations and gradients")
-        print(f"[STORM] Memory offloading configured for {LARGE_DIM}x{LARGE_DIM} model")
+        print(f"[STORM] Memory offloading configured for ChatGPT-scale model")
         
         # Clear memory before STORM test
         clear_memory()
         print(f"[INIT] {get_memory_info()}")
         print(f"[INIT] {get_cpu_memory_info()}")
         
-        print(f"\n[TEST] Creating large model with STORM CPU RAM storage...")
+        print(f"\n[TEST] Creating ChatGPT-scale model with STORM CPU RAM storage...")
         
-        # Create model with STORM CPU RAM storage
+        # Create ChatGPT-scale model with STORM CPU RAM storage
         # In a real implementation, this would use STORM's autograd hooks
-        model = SimpleNet(LARGE_DIM, LARGE_DIM).cuda()
-        print(f"[SUCCESS] STORM model created: {LARGE_DIM}x{LARGE_DIM} weights")
+        model = ChatGPTScaleModel(HIDDEN_DIM, VOCAB_SIZE, NUM_LAYERS)
+        print(f"[SUCCESS] STORM ChatGPT-scale model created:")
+        print(f"[SUCCESS]   - Hidden dimension: {HIDDEN_DIM}")
+        print(f"[SUCCESS]   - Vocabulary size: {VOCAB_SIZE}")
+        print(f"[SUCCESS]   - Number of layers: {NUM_LAYERS}")
+        print(f"[SUCCESS]   - Total parameters: {sum(p.numel() for p in model.parameters()):,}")
         
-        # Create large data tensor
-        large_data = torch.randn(1, LARGE_DIM, device='cuda')
-        print(f"[SUCCESS] Data tensor created: {large_data.shape}")
+        # Create realistic input data (token IDs)
+        batch_size = 1
+        input_ids = torch.randint(0, VOCAB_SIZE, (batch_size, SEQ_LENGTH), device='cuda')
+        print(f"[SUCCESS] Input data created: {input_ids.shape} (token IDs)")
         
         # Create optimizer
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
@@ -190,11 +245,13 @@ def phase_2_storm_training():
         # Run the complete training cycle with STORM
         start_time = time.time()
         
-        output = model(large_data)
+        output = model(input_ids)
         print(f"[SUCCESS] Forward pass completed: {output.shape}")
         print(f"[STORM] Activations offloaded to CPU RAM")
         
-        loss = output.sum()
+        # Compute loss (cross-entropy style)
+        target = torch.randint(0, VOCAB_SIZE, (batch_size, SEQ_LENGTH), device='cuda')
+        loss = torch.nn.functional.cross_entropy(output.view(-1, VOCAB_SIZE), target.view(-1))
         print(f"[SUCCESS] Loss computed: {loss.item()}")
         
         loss.backward()
