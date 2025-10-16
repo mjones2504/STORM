@@ -122,8 +122,15 @@ def storm_large_workload(input_tensor, weight_tensor, bias_tensor, num_layers=8)
             reshaped = current_tensor.view(-1, hidden_size)
             
             # Use STORM's optimized linear layer
+            print(f"[DEBUG] Layer {i}: Input to storm_linear shape: {reshaped.shape}")
+            print(f"[DEBUG] Layer {i}: Input to storm_linear elements: {reshaped.numel()}")
+            
             output = storm_cuda.storm.StormGEMMTensor.storm_linear(
                 reshaped, weight_tensor, bias_tensor, layer_id=i)
+            
+            print(f"[DEBUG] Layer {i}: Output from storm_linear shape: {output.shape}")
+            print(f"[DEBUG] Layer {i}: Output from storm_linear elements: {output.numel()}")
+            
             layer_output = output.view(batch_size, seq_len, hidden_size)
             layer_output = torch.relu(layer_output)
             
