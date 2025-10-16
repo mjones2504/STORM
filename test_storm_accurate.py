@@ -125,41 +125,54 @@ def storm_cpu_ram_simple(input_tensor, weight_tensor, bias_tensor, num_layers=8)
             
             print(f"[STORM] Processing chunk {chunk_idx + 1}/{num_chunks}")
             
-            # Get chunk
-            chunk_input = input_tensor[start_idx:end_idx]
-            current_tensor = chunk_input
-            cpu_activations = []
-            
-            # Process through layers
-            for i in range(num_layers):
-                chunk_batch_size, seq_len, hidden_size = current_tensor.shape
-                reshaped = current_tensor.view(-1, hidden_size)
+            try:
+                # Get chunk
+                chunk_input = input_tensor[start_idx:end_idx]
+                current_tensor = chunk_input
+                cpu_activations = []
                 
-                output = torch.nn.functional.linear(reshaped, weight_tensor, bias_tensor)
-                layer_output = output.view(chunk_batch_size, seq_len, hidden_size)
-                layer_output = torch.relu(layer_output)
+                # Process through layers
+                for i in range(num_layers):
+                    chunk_batch_size, seq_len, hidden_size = current_tensor.shape
+                    reshaped = current_tensor.view(-1, hidden_size)
+                    
+                    output = torch.nn.functional.linear(reshaped, weight_tensor, bias_tensor)
+                    layer_output = output.view(chunk_batch_size, seq_len, hidden_size)
+                    layer_output = torch.relu(layer_output)
+                    
+                    # Store in CPU RAM
+                    cpu_activation = layer_output.cpu()
+                    cpu_activations.append(cpu_activation)
+                    
+                    del layer_output
+                    torch.cuda.empty_cache()
+                    
+                    if i < num_layers - 1:
+                        current_tensor = cpu_activations[i].cuda()
                 
-                # Store in CPU RAM
-                cpu_activation = layer_output.cpu()
-                cpu_activations.append(cpu_activation)
+                # Store chunk result
+                chunk_results.append(cpu_activations[-1])
+                print(f"[STORM] Chunk {chunk_idx + 1} completed successfully")
                 
-                del layer_output
+                # Clean up
+                del current_tensor
                 torch.cuda.empty_cache()
                 
-                if i < num_layers - 1:
-                    current_tensor = cpu_activations[i].cuda()
-            
-            # Store chunk result
-            chunk_results.append(cpu_activations[-1])
-            
-            # Clean up
-            del current_tensor
-            torch.cuda.empty_cache()
+            except RuntimeError as e:
+                print(f"[ERROR] Chunk {chunk_idx + 1} failed: {e}")
+                return None
         
         # Combine results
         print("[STORM] Combining chunk results")
-        final_result = torch.cat(chunk_results, dim=0)
-        return final_result.cuda()
+        try:
+            final_result = torch.cat(chunk_results, dim=0)
+            print("[STORM] Moving final result to GPU")
+            gpu_result = final_result.cuda()
+            del final_result  # Clean up CPU tensor
+            return gpu_result
+        except RuntimeError as e:
+            print(f"[ERROR] Failed to combine chunk results: {e}")
+            return None
         
     except RuntimeError as e:
         print(f"[ERROR] STORM CPU RAM storage failed: {e}")
