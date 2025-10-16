@@ -130,9 +130,12 @@ def storm_large_workload(input_tensor, weight_tensor, bias_tensor, num_layers=8)
             del layer_output
             torch.cuda.empty_cache()
             
-            # Move next input to GPU
+            # Move next input to GPU (preserve original shape)
             if i < num_layers - 1:
                 current_tensor = cpu_activations[i].cuda()
+                # Ensure the tensor maintains the correct shape
+                if current_tensor.shape != (batch_size, seq_len, hidden_size):
+                    current_tensor = current_tensor.view(batch_size, seq_len, hidden_size)
         
         # Return final result
         return cpu_activations[-1].cuda()
