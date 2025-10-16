@@ -61,25 +61,17 @@ def baseline_pytorch(input_tensor, weight_tensor, bias_tensor, num_layers=8):
         return None
 
 def storm_implementation(input_tensor, weight_tensor, bias_tensor, num_layers=8):
-    """STORM implementation - GPU optimization only (fair comparison)"""
+    """STORM implementation - intelligent GPU/CPU strategy selection"""
     try:
-        current_tensor = input_tensor
+        # Import intelligent STORM
+        from storm_intelligent import IntelligentSTORM
         
-        for i in range(num_layers):
-            batch_size, seq_len, hidden_size = current_tensor.shape
-            reshaped = current_tensor.view(-1, hidden_size)
-            
-            # Use STORM CUTLASS optimization
-            output = storm_cuda.storm.StormGEMMTensor.storm_linear(reshaped, weight_tensor, bias_tensor)
-            layer_output = output.view(batch_size, seq_len, hidden_size)
-            layer_output = torch.relu(layer_output)
-            
-            current_tensor = layer_output
-            del layer_output
-            if i > 0:
-                torch.cuda.empty_cache()
+        # Initialize intelligent STORM
+        storm = IntelligentSTORM()
         
-        return current_tensor
+        # Use intelligent STORM to process
+        return storm.process(input_tensor, weight_tensor, bias_tensor, num_layers)
+        
     except RuntimeError as e:
         print(f"[ERROR] STORM failed: {e}")
         return None
@@ -157,6 +149,7 @@ def test_performance():
         
         # Test STORM
         print(f"\n[TEST] STORM Implementation...")
+        print("[STORM] Analyzing workload size and choosing strategy...")
         storm_time = time_operation(storm_implementation, input_tensor, weight_tensor, bias_tensor, num_layers)
         if storm_time:
             print(f"[OK] STORM Time: {storm_time:.2f} ms")
