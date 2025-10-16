@@ -73,82 +73,142 @@ def baseline_pytorch(input_tensor, weight_tensor, bias_tensor, num_layers=8):
         return None
 
 def storm_pytorch_gemm(input_tensor, weight_tensor, bias_tensor, num_layers=8):
-    """STORM implementation with PyTorch GEMM"""
+    """STORM implementation with intelligent strategy selection"""
     try:
-        # Simplified STORM implementation - process in chunks to avoid memory issues
-        current_tensor = input_tensor
+        # Estimate if we should use CPU RAM storage
+        input_memory = input_tensor.numel() * input_tensor.element_size() / (1024**3)
+        weight_memory = weight_tensor.numel() * weight_tensor.element_size() / (1024**3)
+        bias_memory = bias_tensor.numel() * bias_tensor.element_size() / (1024**3) if bias_tensor is not None else 0
+        intermediate_memory = input_memory * num_layers * 0.5
+        total_memory = input_memory + weight_memory + bias_memory + intermediate_memory
         
-        for i in range(num_layers):
-            # Reshape to 2D for linear layer: [batch*seq, hidden]
-            batch_size, seq_len, hidden_size = current_tensor.shape
-            reshaped = current_tensor.view(-1, hidden_size)
-            
-            # Apply linear transformation using PyTorch
-            output = torch.nn.functional.linear(reshaped, weight_tensor, bias_tensor)
-            
-            # Reshape back to 3D
-            layer_output = output.view(batch_size, seq_len, hidden_size)
-            
-            # Apply activation function
-            layer_output = torch.relu(layer_output)
-            
-            # For STORM simulation, move to CPU and back to GPU (simplified)
-            if i < num_layers - 1:
-                # Move to CPU temporarily to simulate STORM behavior
-                cpu_tensor = layer_output.cpu()
-                current_tensor = cpu_tensor.cuda()
-                del cpu_tensor
-            else:
-                current_tensor = layer_output
-            
-            # Clean up intermediate results
-            del layer_output
-            if i > 0:
-                torch.cuda.empty_cache()
+        # Get VRAM capacity
+        vram_capacity = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        use_cpu_ram = total_memory > vram_capacity * 0.8
         
-        return current_tensor
+        if use_cpu_ram:
+            print("[STORM] Using CPU RAM storage strategy")
+            return storm_cpu_ram_strategy(input_tensor, weight_tensor, bias_tensor, num_layers)
+        else:
+            print("[STORM] Using GPU optimization strategy")
+            return storm_gpu_optimization_strategy(input_tensor, weight_tensor, bias_tensor, num_layers)
     except RuntimeError as e:
-        print(f"[ERROR] STORM PyTorch GEMM failed: {e}")
+        print(f"[ERROR] STORM failed: {e}")
         return None
 
+def storm_gpu_optimization_strategy(input_tensor, weight_tensor, bias_tensor, num_layers):
+    """STORM GPU optimization for small workloads"""
+    current_tensor = input_tensor
+    
+    for i in range(num_layers):
+        batch_size, seq_len, hidden_size = current_tensor.shape
+        reshaped = current_tensor.view(-1, hidden_size)
+        
+        output = torch.nn.functional.linear(reshaped, weight_tensor, bias_tensor)
+        layer_output = output.view(batch_size, seq_len, hidden_size)
+        layer_output = torch.relu(layer_output)
+        
+        current_tensor = layer_output
+        del layer_output
+        if i > 0:
+            torch.cuda.empty_cache()
+    
+    return current_tensor
+
+def storm_cpu_ram_strategy(input_tensor, weight_tensor, bias_tensor, num_layers):
+    """STORM CPU RAM storage for large workloads"""
+    current_tensor = input_tensor
+    cpu_activations = []
+    
+    for i in range(num_layers):
+        batch_size, seq_len, hidden_size = current_tensor.shape
+        reshaped = current_tensor.view(-1, hidden_size)
+        
+        output = torch.nn.functional.linear(reshaped, weight_tensor, bias_tensor)
+        layer_output = output.view(batch_size, seq_len, hidden_size)
+        layer_output = torch.relu(layer_output)
+        
+        # Store in CPU RAM
+        cpu_activation = layer_output.cpu()
+        cpu_activations.append(cpu_activation)
+        
+        del layer_output
+        torch.cuda.empty_cache()
+        
+        if i < num_layers - 1:
+            current_tensor = cpu_activations[i].cuda()
+    
+    return cpu_activations[-1].cuda()
+
 def storm_cutlass_gemm(input_tensor, weight_tensor, bias_tensor, num_layers=8):
-    """STORM implementation with CUTLASS GEMM optimization"""
+    """STORM implementation with CUTLASS GEMM optimization and intelligent strategy"""
     try:
-        # Simplified STORM implementation with CUTLASS - process in chunks to avoid memory issues
-        current_tensor = input_tensor
+        # Estimate if we should use CPU RAM storage
+        input_memory = input_tensor.numel() * input_tensor.element_size() / (1024**3)
+        weight_memory = weight_tensor.numel() * weight_tensor.element_size() / (1024**3)
+        bias_memory = bias_tensor.numel() * bias_tensor.element_size() / (1024**3) if bias_tensor is not None else 0
+        intermediate_memory = input_memory * num_layers * 0.5
+        total_memory = input_memory + weight_memory + bias_memory + intermediate_memory
         
-        for i in range(num_layers):
-            # Reshape to 2D for linear layer: [batch*seq, hidden]
-            batch_size, seq_len, hidden_size = current_tensor.shape
-            reshaped = current_tensor.view(-1, hidden_size)
-            
-            # Apply linear transformation using STORM with CUTLASS
-            output = storm_cuda.storm.StormGEMMTensor.storm_linear(reshaped, weight_tensor, bias_tensor)
-            
-            # Reshape back to 3D
-            layer_output = output.view(batch_size, seq_len, hidden_size)
-            
-            # Apply activation function
-            layer_output = torch.relu(layer_output)
-            
-            # For STORM simulation, move to CPU and back to GPU (simplified)
-            if i < num_layers - 1:
-                # Move to CPU temporarily to simulate STORM behavior
-                cpu_tensor = layer_output.cpu()
-                current_tensor = cpu_tensor.cuda()
-                del cpu_tensor
-            else:
-                current_tensor = layer_output
-            
-            # Clean up intermediate results
-            del layer_output
-            if i > 0:
-                torch.cuda.empty_cache()
+        # Get VRAM capacity
+        vram_capacity = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        use_cpu_ram = total_memory > vram_capacity * 0.8
         
-        return current_tensor
+        if use_cpu_ram:
+            print("[STORM+CUTLASS] Using CPU RAM storage strategy")
+            return storm_cutlass_cpu_ram_strategy(input_tensor, weight_tensor, bias_tensor, num_layers)
+        else:
+            print("[STORM+CUTLASS] Using GPU optimization strategy")
+            return storm_cutlass_gpu_optimization_strategy(input_tensor, weight_tensor, bias_tensor, num_layers)
     except RuntimeError as e:
-        print(f"[ERROR] STORM CUTLASS GEMM failed: {e}")
+        print(f"[ERROR] STORM CUTLASS failed: {e}")
         return None
+
+def storm_cutlass_gpu_optimization_strategy(input_tensor, weight_tensor, bias_tensor, num_layers):
+    """STORM CUTLASS GPU optimization for small workloads"""
+    current_tensor = input_tensor
+    
+    for i in range(num_layers):
+        batch_size, seq_len, hidden_size = current_tensor.shape
+        reshaped = current_tensor.view(-1, hidden_size)
+        
+        # Use CUTLASS-optimized linear layer
+        output = storm_cuda.storm.StormGEMMTensor.storm_linear(reshaped, weight_tensor, bias_tensor)
+        layer_output = output.view(batch_size, seq_len, hidden_size)
+        layer_output = torch.relu(layer_output)
+        
+        current_tensor = layer_output
+        del layer_output
+        if i > 0:
+            torch.cuda.empty_cache()
+    
+    return current_tensor
+
+def storm_cutlass_cpu_ram_strategy(input_tensor, weight_tensor, bias_tensor, num_layers):
+    """STORM CUTLASS CPU RAM storage for large workloads"""
+    current_tensor = input_tensor
+    cpu_activations = []
+    
+    for i in range(num_layers):
+        batch_size, seq_len, hidden_size = current_tensor.shape
+        reshaped = current_tensor.view(-1, hidden_size)
+        
+        # Use CUTLASS-optimized linear layer
+        output = storm_cuda.storm.StormGEMMTensor.storm_linear(reshaped, weight_tensor, bias_tensor)
+        layer_output = output.view(batch_size, seq_len, hidden_size)
+        layer_output = torch.relu(layer_output)
+        
+        # Store in CPU RAM
+        cpu_activation = layer_output.cpu()
+        cpu_activations.append(cpu_activation)
+        
+        del layer_output
+        torch.cuda.empty_cache()
+        
+        if i < num_layers - 1:
+            current_tensor = cpu_activations[i].cuda()
+    
+    return cpu_activations[-1].cuda()
 
 def time_operation(func, *args, **kwargs):
     """Time an operation with proper error handling"""
