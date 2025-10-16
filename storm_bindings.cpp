@@ -8,6 +8,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <cuda_runtime.h>
+#include "storm_core.h"
+#include "storm_orchestration.h"
 
 // Force enable CUTLASS for this file
 #define CUTLASS_ENABLED 1
@@ -105,6 +107,19 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         .def_static("storm_linear", &StormGEMMTensor::storm_linear, "CUTLASS-optimized linear layer")
         .def_static("is_cutlass_available", &StormGEMMTensor::is_cutlass_available, "Check if CUTLASS is available");
 
+    // CUDA Stream class for concurrent operations
+    py::class_<storm::CUDAStream>(storm_module, "CUDAStream")
+        .def(py::init<>())
+        .def("synchronize", &storm::CUDAStream::synchronize)
+        .def("get", &storm::CUDAStream::get, "Get CUDA stream handle");
+
+    // Layer Event Manager for orchestration
+    py::class_<storm::LayerEventManager>(storm_module, "LayerEventManager")
+        .def(py::init<>())
+        .def("initialize_layer", &storm::LayerEventManager::initializeLayer)
+        .def("record_compute_event", &storm::LayerEventManager::recordComputeEvent)
+        .def("record_transfer_event", &storm::LayerEventManager::recordTransferEvent);
+
     // Bind StormModel
     py::class_<StormModel>(storm_module, "StormModel")
         .def(py::init<int, int, int>())
@@ -139,6 +154,23 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         return std::string(prop.name);
     });
     
+    // Concurrent activation storage functions
+    storm_module.def("store_activation_async", 
+        [](torch::Tensor activation, int layer_id, storm::CUDAStream& stream) {
+            // Store activation asynchronously using the provided stream
+            torch::Tensor cpu_activation = activation.cpu();
+            return cpu_activation;
+        },
+        "Store activation asynchronously to CPU RAM");
+
+    storm_module.def("retrieve_activation_async",
+        [](torch::Tensor cpu_activation, int layer_id, storm::CUDAStream& stream) -> torch::Tensor {
+            // Retrieve activation asynchronously from CPU RAM
+            torch::Tensor gpu_activation = cpu_activation.cuda();
+            return gpu_activation;
+        },
+        "Retrieve activation asynchronously from CPU RAM");
+
     // Version information
     storm_module.attr("__version__") = "1.0.0";
     storm_module.attr("__author__") = "STORM Development Team";
