@@ -53,44 +53,69 @@ class SideBySideSTORM:
         gc.collect()
     
     def process_with_cpu_ram(self, input_tensor, weight_tensor, bias_tensor, num_layers):
-        """STORM implementation using CPU RAM storage"""
+        """STORM implementation using CPU RAM storage with chunking"""
         print("[STORM] Using CPU RAM storage to eliminate memory wall")
         
         try:
-            current_tensor = input_tensor
-            cpu_activations = []
+            # Process in smaller chunks to avoid OOM
+            batch_size, seq_len, hidden_size = input_tensor.shape
             
-            for i in range(num_layers):
-                print(f"[STORM] Processing layer {i+1}/{num_layers}")
+            # Process in smaller batches to avoid memory issues
+            chunk_size = min(32, batch_size)  # Process in chunks of 32 or smaller
+            num_chunks = (batch_size + chunk_size - 1) // chunk_size
+            
+            print(f"[STORM] Processing {num_chunks} chunks of size {chunk_size}")
+            
+            # Process each chunk
+            chunk_results = []
+            for chunk_idx in range(num_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min((chunk_idx + 1) * chunk_size, batch_size)
                 
-                # Reshape to 2D for linear layer
-                batch_size, seq_len, hidden_size = current_tensor.shape
-                reshaped = current_tensor.view(-1, hidden_size)
+                print(f"[STORM] Processing chunk {chunk_idx + 1}/{num_chunks}")
                 
-                # Apply linear transformation
-                output = torch.nn.functional.linear(reshaped, weight_tensor, bias_tensor)
+                # Get chunk
+                chunk_input = input_tensor[start_idx:end_idx]
+                current_tensor = chunk_input
+                cpu_activations = []
                 
-                # Reshape back to 3D
-                layer_output = output.view(batch_size, seq_len, hidden_size)
-                layer_output = torch.relu(layer_output)
+                # Process through layers
+                for i in range(num_layers):
+                    # Reshape to 2D for linear layer
+                    chunk_batch_size, seq_len, hidden_size = current_tensor.shape
+                    reshaped = current_tensor.view(-1, hidden_size)
+                    
+                    # Apply linear transformation
+                    output = torch.nn.functional.linear(reshaped, weight_tensor, bias_tensor)
+                    
+                    # Reshape back to 3D
+                    layer_output = output.view(chunk_batch_size, seq_len, hidden_size)
+                    layer_output = torch.relu(layer_output)
+                    
+                    # Store in CPU RAM to free VRAM
+                    cpu_activation = layer_output.cpu()
+                    cpu_activations.append(cpu_activation)
+                    
+                    # Clean up GPU memory
+                    del layer_output
+                    self._clear_gpu_memory()
+                    
+                    # Move next input to GPU
+                    if i < num_layers - 1:
+                        current_tensor = cpu_activations[i].cuda()
                 
-                # Store in CPU RAM to free VRAM
-                print(f"[STORM] Moving layer {i+1} output to CPU RAM")
-                cpu_activation = layer_output.cpu()
-                cpu_activations.append(cpu_activation)
+                # Store chunk result
+                chunk_results.append(cpu_activations[-1])
                 
-                # Clean up GPU memory
-                del layer_output
+                # Clean up
+                del current_tensor
                 self._clear_gpu_memory()
-                
-                # Move next input to GPU
-                if i < num_layers - 1:
-                    print(f"[STORM] Moving layer {i+1} input from CPU RAM to GPU")
-                    current_tensor = cpu_activations[i].cuda()
             
-            # Return final result
-            print("[STORM] Moving final result from CPU RAM to GPU")
-            return cpu_activations[-1].cuda()
+            # Combine chunk results
+            print("[STORM] Combining chunk results")
+            final_result = torch.cat(chunk_results, dim=0)
+            
+            return final_result.cuda()
             
         except RuntimeError as e:
             print(f"[ERROR] STORM CPU RAM storage failed: {e}")
@@ -177,6 +202,15 @@ def test_progressive_workloads():
         
         # Clear memory before each test
         storm._clear_gpu_memory()
+        
+        # Force garbage collection
+        import gc
+        gc.collect()
+        
+        # Reset CUDA memory stats
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.empty_cache()
         
         # Create workload
         input_tensor, weight_tensor, bias_tensor, memory_usage = create_workload(
