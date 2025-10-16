@@ -10,6 +10,7 @@
 #include <cuda_runtime.h>
 #include "storm_core.h"
 #include "storm_orchestration.h"
+#include "storm_gemm.h"
 
 // Force enable CUTLASS for this file
 #define CUTLASS_ENABLED 1
@@ -46,17 +47,29 @@ public:
         // Create output tensor
         auto output = torch::zeros({batch_size, output_features}, input.options());
 
-        // Use CUTLASS GEMM for the computation
+        // Use STORM's custom CUTLASS GEMM with shared memory tiling
         try {
-            // For now, use PyTorch's optimized operations with CUTLASS optimizations
-            // This is a simplified implementation - full CUTLASS integration would be more complex
-
-            // Use PyTorch's optimized GEMM with CUTLASS backend optimizations
-            auto result = torch::mm(input, weight.t());
-            if (bias.defined()) {
-                result = result + bias;
+            // Get raw pointers for CUTLASS
+            auto input_ptr = input.data_ptr<float>();
+            auto weight_ptr = weight.data_ptr<float>();
+            auto output_ptr = output.data_ptr<float>();
+            
+            // Use STORM's custom CUTLASS GEMM with aggressive shared memory tiling
+            cudaError_t error = storm::StormGEMM::storm_gemm(
+                input_ptr, weight_ptr, output_ptr,
+                batch_size, output_features, input_features
+            );
+            
+            if (error != cudaSuccess) {
+                throw std::runtime_error("STORM CUTLASS GEMM failed");
             }
-            return result;
+            
+            // Add bias if provided
+            if (bias.defined()) {
+                output = output + bias;
+            }
+            
+            return output;
 
         } catch (const std::exception& e) {
             // Fallback to PyTorch if CUTLASS fails
