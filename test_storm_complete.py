@@ -124,12 +124,21 @@ def storm_large_workload(input_tensor, weight_tensor, bias_tensor, num_layers=8)
             # Use STORM's optimized linear layer
             print(f"[DEBUG] Layer {i}: Input to storm_linear shape: {reshaped.shape}")
             print(f"[DEBUG] Layer {i}: Input to storm_linear elements: {reshaped.numel()}")
+            print(f"[DEBUG] Layer {i}: Weight tensor shape: {weight_tensor.shape}")
+            print(f"[DEBUG] Layer {i}: Bias tensor shape: {bias_tensor.shape}")
             
             output = storm_cuda.storm.StormGEMMTensor.storm_linear(
                 reshaped, weight_tensor, bias_tensor, layer_id=i)
             
             print(f"[DEBUG] Layer {i}: Output from storm_linear shape: {output.shape}")
             print(f"[DEBUG] Layer {i}: Output from storm_linear elements: {output.numel()}")
+            
+            # Check if output dimensions are correct
+            expected_rows = reshaped.shape[0]
+            expected_cols = weight_tensor.shape[0]  # Output features
+            if output.shape != (expected_rows, expected_cols):
+                print(f"[ERROR] Dimension mismatch! Expected ({expected_rows}, {expected_cols}), got {output.shape}")
+                print(f"[ERROR] This is the root cause of the 1/8th element issue!")
             
             layer_output = output.view(batch_size, seq_len, hidden_size)
             layer_output = torch.relu(layer_output)
