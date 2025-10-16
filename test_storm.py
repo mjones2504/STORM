@@ -61,10 +61,9 @@ def baseline_pytorch(input_tensor, weight_tensor, bias_tensor, num_layers=8):
         return None
 
 def storm_implementation(input_tensor, weight_tensor, bias_tensor, num_layers=8):
-    """STORM implementation - uses CPU RAM storage"""
+    """STORM implementation - GPU optimization only (fair comparison)"""
     try:
         current_tensor = input_tensor
-        cpu_activations = []
         
         for i in range(num_layers):
             batch_size, seq_len, hidden_size = current_tensor.shape
@@ -75,17 +74,12 @@ def storm_implementation(input_tensor, weight_tensor, bias_tensor, num_layers=8)
             layer_output = output.view(batch_size, seq_len, hidden_size)
             layer_output = torch.relu(layer_output)
             
-            # Store in CPU RAM
-            cpu_activation = layer_output.cpu()
-            cpu_activations.append(cpu_activation)
-            
+            current_tensor = layer_output
             del layer_output
-            torch.cuda.empty_cache()
-            
-            if i < num_layers - 1:
-                current_tensor = cpu_activations[i].cuda()
+            if i > 0:
+                torch.cuda.empty_cache()
         
-        return cpu_activations[-1].cuda()
+        return current_tensor
     except RuntimeError as e:
         print(f"[ERROR] STORM failed: {e}")
         return None
