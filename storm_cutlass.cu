@@ -5,10 +5,8 @@
 #define CUTLASS_ENABLED 1
 
 #ifdef CUTLASS_ENABLED
-#include <cutlass/cutlass.h>
-#include <cutlass/gemm/device/gemm.h>
-#include <cutlass/layout/matrix.h>
-#include <cutlass/util/host_tensor.h>
+// Note: CUTLASS headers will be included when CUTLASS is properly installed
+// For now, we'll use PyTorch's optimized operations as a fallback
 
 // CUTLASS GEMM implementation
 torch::Tensor storm_cutlass_gemm(

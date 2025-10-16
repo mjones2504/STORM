@@ -14,6 +14,10 @@
 
 namespace py = pybind11;
 
+// Forward declarations for CUTLASS functions (defined in storm_cutlass.cu)
+torch::Tensor storm_cutlass_gemm(torch::Tensor input, torch::Tensor weight, torch::Tensor bias);
+std::string get_cutlass_config_info();
+
 // CUTLASS GEMM wrapper class
 #ifdef CUTLASS_ENABLED
 class StormGEMMTensor {

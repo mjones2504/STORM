@@ -199,8 +199,11 @@ extensions = []
 # Main STORM extension sources
 storm_sources = [
     "storm_bindings.cpp",
-    "storm_cutlass.cu",  # CUTLASS-specific CUDA code
 ]
+
+# Only include CUTLASS-specific code if CUTLASS is available
+if CUTLASS_AVAILABLE:
+    storm_sources.append("storm_cutlass.cu")
 
 # Check if we have the bindings file
 existing_sources = []
