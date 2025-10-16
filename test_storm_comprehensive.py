@@ -98,8 +98,6 @@ def storm_pytorch_gemm(input_tensor, weight_tensor, bias_tensor, num_layers=8):
             
             # Clean up GPU memory
             del layer_output
-            if i > 0:
-                del cpu_activations[i-1]
             torch.cuda.empty_cache()
             
             # Move next input to GPU
@@ -138,8 +136,6 @@ def storm_cutlass_gemm(input_tensor, weight_tensor, bias_tensor, num_layers=8):
             
             # Clean up GPU memory
             del layer_output
-            if i > 0:
-                del cpu_activations[i-1]
             torch.cuda.empty_cache()
             
             # Move next input to GPU
