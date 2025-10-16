@@ -18,8 +18,6 @@
 #include <cutlass/arch/mma.h>
 #include <cutlass/epilogue/thread/linear_combination.h>
 #include <cutlass/gemm/threadblock/threadblock_swizzle.h>
-#include <cutlass/gemm/threadblock/default_mma.h>
-#include <cutlass/gemm/threadblock/default_epilogue.h>
 #endif
 
 #include "storm_core.h"
