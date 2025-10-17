@@ -111,7 +111,7 @@ public:
     /**
      * Get cache statistics
      */
-    std::string getCacheStats() const;
+    std::string getCacheStats();
 };
 
 /**
@@ -142,7 +142,7 @@ public:
      * @param layer_id Layer identifier
      * @return Escape code index, or -1 if not set
      */
-    int getEscapeCode(int layer_id) const;
+    int getEscapeCode(int layer_id);
     
     /**
      * Check if value is an outlier (not in dictionary)

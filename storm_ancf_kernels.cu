@@ -660,7 +660,7 @@ void storm::ANCFDictionaryManager::clearCache() {
     cached_dictionaries_.clear();
 }
 
-std::string storm::ANCFDictionaryManager::getCacheStats() const {
+std::string storm::ANCFDictionaryManager::getCacheStats() {
     std::lock_guard<std::mutex> lock(cache_mutex_);
     return "Cached dictionaries: " + std::to_string(cached_dictionaries_.size());
 }
@@ -675,7 +675,7 @@ int storm::ANCFEscapeHandler::reserveEscapeCode(int layer_id, int dictionary_siz
     return escape_code;
 }
 
-int storm::ANCFEscapeHandler::getEscapeCode(int layer_id) const {
+int storm::ANCFEscapeHandler::getEscapeCode(int layer_id) {
     std::lock_guard<std::mutex> lock(escape_mutex_);
     auto it = layer_escape_codes_.find(layer_id);
     return (it != layer_escape_codes_.end()) ? it->second : -1;
