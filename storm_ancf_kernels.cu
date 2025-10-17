@@ -33,7 +33,7 @@ constexpr float CONVERGENCE_THRESHOLD = 1e-6f;
 /**
  * Utility function to get optimal CUDA grid size
  */
-__device__ __forceinline__ dim3 getGridSize(int num_elements, int block_size = BLOCK_SIZE) {
+__forceinline__ dim3 getGridSize(int num_elements, int block_size = BLOCK_SIZE) {
     return dim3((num_elements + block_size - 1) / block_size);
 }
 
