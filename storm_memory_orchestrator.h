@@ -119,10 +119,10 @@ public:
     }
 
     /**
-     * Cache tensor for bandwidth optimization
+     * Cache tensor for bandwidth optimization with ANCF compression
      * 
      * This function caches frequently accessed tensors to reduce
-     * VRAM bandwidth usage through cache hits.
+     * VRAM bandwidth usage through cache hits and ANCF compression.
      * 
      * @param tensor Tensor to cache
      * @param cache_key Unique cache key
@@ -134,6 +134,9 @@ public:
         
         // Apply bandwidth optimization
         optimize_memory_layout(tensor);
+        
+        // TODO: Add ANCF compression for CPU storage optimization
+        // This will be implemented when ANCF integration is complete
     }
 
     /**

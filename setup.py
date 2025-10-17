@@ -53,7 +53,9 @@ def check_storm_headers():
         "storm_tensor_cache.h",
         "storm_bandwidth_optimizer.h",
         "storm_gemm.h",
-        "storm_orchestration.h"
+        "storm_orchestration.h",
+        "storm_ancf_encoder.h",
+        "storm_ancf_integration.h"
     ]
     
     missing_headers = []
@@ -157,9 +159,14 @@ extensions = []
 # Main STORM extension sources
 storm_sources = [
     "storm_bindings.cpp",
+    "storm_ancf_bindings.cpp",
 ]
 
-# STORM uses PyTorch-based optimization, no additional CUDA files needed
+# ANCF CUDA sources
+ancf_cuda_sources = [
+    "storm_ancf_kernels.cu",
+    "storm_cutlass.cu",
+]
 
 # Check if we have the bindings file
 existing_sources = []
@@ -195,11 +202,17 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         f.write(minimal_bindings)
     existing_sources = ["storm_bindings.cpp"]
 
-# If we have CUDA, create CUDA extension
+# If we have CUDA, create CUDA extension with ANCF support
 if CUDA_AVAILABLE and existing_sources:
+    # Add ANCF CUDA sources if they exist
+    all_sources = existing_sources.copy()
+    for cuda_source in ancf_cuda_sources:
+        if os.path.exists(cuda_source):
+            all_sources.append(cuda_source)
+    
     storm_extension = CUDAExtension(
         name="storm_cuda",
-        sources=existing_sources,
+        sources=all_sources,
         include_dirs=include_dirs,
         library_dirs=library_dirs,
         libraries=libraries,
@@ -210,6 +223,7 @@ if CUDA_AVAILABLE and existing_sources:
         define_macros=[
             ("CUDA_AVAILABLE", "1"),
             ("TORCH_EXTENSION_NAME", "storm_cuda"),
+            ("ANCF_ENABLED", "1"),
         ] + ([("NVTX_ENABLED", "1")] if NVTX_AVAILABLE else []),
     )
     extensions.append(storm_extension)
@@ -245,10 +259,10 @@ if not extensions:
 # Python package configuration
 setup(
     name="storm",
-    version="2.0.0",
+    version="2.1.0",
     author="STORM Development Team",
     author_email="storm@auditve.com",
-    description="STORM - PyTorch-based Bandwidth Optimization for Deep Learning",
+    description="STORM - PyTorch-based Bandwidth Optimization with ANCF Lossless Encoding",
     long_description=open("README.md").read() if os.path.exists("README.md") else "",
     long_description_content_type="text/markdown",
     url="https://github.com/mjones2504/STORM",

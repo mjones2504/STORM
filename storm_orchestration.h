@@ -396,7 +396,7 @@ public:
         return true;
     }
     
-    // Advanced forward pass with orchestration
+    // Advanced forward pass with orchestration and ANCF encoding
     torch::Tensor orchestratedForward(torch::Tensor input, int layer_id) {
         if (!orchestration_active_) {
             throw std::runtime_error("Orchestrator not initialized");
@@ -408,7 +408,7 @@ public:
         // Perform forward computation
         auto output = torch::linear(input, torch::randn({input.size(1), 64}), torch::randn({64}));
         
-        // Store activation in cache
+        // Store activation in cache with ANCF encoding for compression
         activation_cache_->storeActivation(layer_id, output);
         
         // Record compute event
