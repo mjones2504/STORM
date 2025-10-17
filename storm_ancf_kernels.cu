@@ -2,7 +2,6 @@
 #include <torch/extension.h>
 #include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
-#include <ATen/Half.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 #include <cub/cub.cuh>
@@ -924,15 +923,8 @@ bool storm::ANCFEncoder::verifyLossless(const torch::Tensor& original, const tor
             }
         }
     } else if (orig_cont.dtype() == torch::kFloat16) {
-        const at::Half* orig_data = orig_cont.data_ptr<at::Half>();
-        const at::Half* dec_data = dec_cont.data_ptr<at::Half>();
-        
-        size_t num_elements = orig_cont.numel();
-        for (size_t i = 0; i < num_elements; ++i) {
-            if (orig_data[i] != dec_data[i]) {
-                return false;
-            }
-        }
+        // For FP16, use torch's built-in comparison since Half comparison is complex
+        return torch::equal(orig_cont, dec_cont);
     } else {
         // For other types, use torch's built-in comparison
         return torch::equal(orig_cont, dec_cont);
