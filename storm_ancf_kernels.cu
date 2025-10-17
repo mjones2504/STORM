@@ -2,12 +2,15 @@
 #include <torch/extension.h>
 #include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
+#include <ATen/Half.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 #include <cub/cub.cuh>
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <mutex>
+#include <limits>
 #include "storm_ancf_encoder.h"
 
 /**
@@ -596,6 +599,346 @@ torch::Tensor decodeActivationGPU(
     cudaDeviceSynchronize();
     
     return output;
+}
+
+/**
+ * ANCFDictionaryManager implementations
+ */
+int storm::ANCFDictionaryManager::analyzeSparsity(const torch::Tensor& activation) const {
+    auto metrics = analyzeSparsityGPU(activation);
+    float zero_ratio = metrics[0];
+    
+    // Determine dictionary size based on policy and sparsity
+    switch (policy_) {
+        case DictionarySizePolicy::CONSERVATIVE:
+            return 128; // Always use smaller dictionary
+        case DictionarySizePolicy::ADAPTIVE:
+            if (zero_ratio > 0.7f) return 128;      // Very sparse
+            else if (zero_ratio > 0.4f) return 256; // Moderately sparse
+            else return 512;                        // Dense
+        case DictionarySizePolicy::AGGRESSIVE:
+            if (zero_ratio > 0.5f) return 128;      // Sparse
+            else return 512;                        // Dense
+        default:
+            return 256;
+    }
+}
+
+std::vector<float> storm::ANCFDictionaryManager::createDictionary(
+    const torch::Tensor& activation,
+    int dictionary_size,
+    int layer_id
+) {
+    // Check cache first
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        if (cached_dictionaries_.find(layer_id) != cached_dictionaries_.end()) {
+            return cached_dictionaries_[layer_id];
+        }
+    }
+    
+    // Create dictionary using K-means
+    auto centroids = kmeansClusteringGPU(activation, dictionary_size);
+    
+    // Convert to vector
+    std::vector<float> dictionary(dictionary_size);
+    auto centroids_cpu = centroids.cpu();
+    for (int i = 0; i < dictionary_size; i++) {
+        dictionary[i] = centroids_cpu[i].item<float>();
+    }
+    
+    // Cache if enabled
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        cached_dictionaries_[layer_id] = dictionary;
+    }
+    
+    return dictionary;
+}
+
+void storm::ANCFDictionaryManager::clearCache() {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    cached_dictionaries_.clear();
+}
+
+std::string storm::ANCFDictionaryManager::getCacheStats() const {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    return "Cached dictionaries: " + std::to_string(cached_dictionaries_.size());
+}
+
+/**
+ * ANCFEscapeHandler implementations
+ */
+int storm::ANCFEscapeHandler::reserveEscapeCode(int layer_id, int dictionary_size) {
+    std::lock_guard<std::mutex> lock(escape_mutex_);
+    int escape_code = dictionary_size - 1;
+    layer_escape_codes_[layer_id] = escape_code;
+    return escape_code;
+}
+
+int storm::ANCFEscapeHandler::getEscapeCode(int layer_id) const {
+    std::lock_guard<std::mutex> lock(escape_mutex_);
+    auto it = layer_escape_codes_.find(layer_id);
+    return (it != layer_escape_codes_.end()) ? it->second : -1;
+}
+
+bool storm::ANCFEscapeHandler::isOutlier(float value, const std::vector<float>& dictionary, float tolerance) const {
+    for (float dict_val : dictionary) {
+        if (std::abs(value - dict_val) < tolerance) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int storm::ANCFEscapeHandler::findNearestIndex(float value, const std::vector<float>& dictionary) const {
+    float min_distance = std::numeric_limits<float>::max();
+    int best_index = -1;
+    
+    for (size_t i = 0; i < dictionary.size(); i++) {
+        float distance = std::abs(value - dictionary[i]);
+        if (distance < min_distance) {
+            min_distance = distance;
+            best_index = static_cast<int>(i);
+        }
+    }
+    
+    return best_index;
+}
+
+void storm::ANCFEscapeHandler::clearEscapeCodes() {
+    std::lock_guard<std::mutex> lock(escape_mutex_);
+    layer_escape_codes_.clear();
+}
+
+/**
+ * ANCFEncoder implementations
+ */
+storm::ANCFEncodedData storm::ANCFEncoder::encodeActivation(const torch::Tensor& activation, int layer_id) {
+    auto start_time = std::chrono::high_resolution_clock::now();
+    
+    // Analyze sparsity and determine dictionary size
+    int dictionary_size = dict_manager_->analyzeSparsity(activation);
+    
+    // Create dictionary
+    auto dictionary = dict_manager_->createDictionary(activation, dictionary_size, layer_id);
+    
+    // Reserve escape code
+    int escape_code = escape_handler_->reserveEscapeCode(layer_id, dictionary_size);
+    
+    // Convert dictionary to tensor
+    auto dict_tensor = torch::from_blob(dictionary.data(), {dictionary_size}, 
+                                       torch::TensorOptions().dtype(torch::kFloat32).device(activation.device()));
+    
+    // Encode on GPU
+    auto [indices, outliers, outlier_positions, outlier_count] = encodeActivationGPU(
+        activation, dict_tensor, escape_code, outlier_tolerance_
+    );
+    
+    // Convert results to vectors
+    ANCFEncodedData result;
+    result.dictionary = dictionary;
+    result.dictionary_size = dictionary_size;
+    result.escape_code = escape_code;
+    result.original_shape = activation.sizes().vec();
+    
+    // Convert indices to vector
+    auto indices_cpu = indices.cpu();
+    result.indices.resize(indices.numel());
+    std::memcpy(result.indices.data(), indices_cpu.data_ptr<uint8_t>(), indices.numel());
+    
+    // Convert outliers to vectors
+    int num_outliers = outlier_count.item<int>();
+    if (num_outliers > 0) {
+        auto outliers_cpu = outliers.cpu();
+        auto positions_cpu = outlier_positions.cpu();
+        
+        result.outliers.resize(num_outliers);
+        result.outlier_positions.resize(num_outliers);
+        
+        std::memcpy(result.outliers.data(), outliers_cpu.data_ptr<float>(), num_outliers * sizeof(float));
+        std::memcpy(result.outlier_positions.data(), positions_cpu.data_ptr<int>(), num_outliers * sizeof(int));
+    }
+    
+    // Calculate compression ratio
+    size_t original_size = activation.numel() * sizeof(float);
+    size_t compressed_size = result.indices.size() + result.dictionary.size() * sizeof(float) + 
+                            result.outliers.size() * sizeof(float) + result.outlier_positions.size() * sizeof(size_t);
+    result.compression_ratio = static_cast<float>(original_size) / static_cast<float>(compressed_size);
+    
+    // Record timing
+    auto end_time = std::chrono::high_resolution_clock::now();
+    result.encode_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+    
+    // Update statistics
+    total_original_bytes_ += original_size;
+    total_encoded_bytes_ += compressed_size;
+    encoding_operations_++;
+    
+    return result;
+}
+
+torch::Tensor storm::ANCFEncoder::decodeActivation(const ANCFEncodedData& encoded_data, torch::Device device) {
+    // Convert vectors back to tensors
+    auto indices = torch::from_blob(const_cast<uint8_t*>(encoded_data.indices.data()), 
+                                   {static_cast<int64_t>(encoded_data.indices.size())},
+                                   torch::TensorOptions().dtype(torch::kUInt8).device(device));
+    
+    auto dictionary = torch::from_blob(const_cast<float*>(encoded_data.dictionary.data()),
+                                      {encoded_data.dictionary_size},
+                                      torch::TensorOptions().dtype(torch::kFloat32).device(device));
+    
+    torch::Tensor outliers, outlier_positions;
+    if (!encoded_data.outliers.empty()) {
+        outliers = torch::from_blob(const_cast<float*>(encoded_data.outliers.data()),
+                                   {static_cast<int64_t>(encoded_data.outliers.size())},
+                                   torch::TensorOptions().dtype(torch::kFloat32).device(device));
+        
+        outlier_positions = torch::from_blob(const_cast<size_t*>(encoded_data.outlier_positions.data()),
+                                           {static_cast<int64_t>(encoded_data.outlier_positions.size())},
+                                           torch::TensorOptions().dtype(torch::kInt64).device(device));
+    } else {
+        outliers = torch::empty({0}, torch::TensorOptions().dtype(torch::kFloat32).device(device));
+        outlier_positions = torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(device));
+    }
+    
+    // Decode on GPU
+    return decodeActivationGPU(indices, dictionary, outliers, outlier_positions, 
+                              encoded_data.escape_code, encoded_data.original_shape);
+}
+
+std::vector<uint8_t> storm::ANCFEncoder::encodeForCPUStorage(const torch::Tensor& activation, int layer_id) {
+    auto encoded_data = encodeActivation(activation, layer_id);
+    
+    // Serialize to byte vector (simplified)
+    std::vector<uint8_t> result;
+    
+    // Add dictionary size and escape code
+    result.insert(result.end(), reinterpret_cast<uint8_t*>(&encoded_data.dictionary_size),
+                  reinterpret_cast<uint8_t*>(&encoded_data.dictionary_size) + sizeof(int));
+    result.insert(result.end(), reinterpret_cast<uint8_t*>(&encoded_data.escape_code),
+                  reinterpret_cast<uint8_t*>(&encoded_data.escape_code) + sizeof(int));
+    
+    // Add indices
+    result.insert(result.end(), encoded_data.indices.begin(), encoded_data.indices.end());
+    
+    // Add dictionary
+    result.insert(result.end(), reinterpret_cast<uint8_t*>(encoded_data.dictionary.data()),
+                  reinterpret_cast<uint8_t*>(encoded_data.dictionary.data()) + 
+                  encoded_data.dictionary.size() * sizeof(float));
+    
+    // Add outliers
+    if (!encoded_data.outliers.empty()) {
+        result.insert(result.end(), reinterpret_cast<uint8_t*>(encoded_data.outliers.data()),
+                      reinterpret_cast<uint8_t*>(encoded_data.outliers.data()) + 
+                      encoded_data.outliers.size() * sizeof(float));
+    }
+    
+    return result;
+}
+
+std::vector<uint8_t> storm::ANCFEncoder::encodeForPCIeTransfer(const torch::Tensor& activation, int layer_id) {
+    // Same as CPU storage for now
+    return encodeForCPUStorage(activation, layer_id);
+}
+
+std::string storm::ANCFEncoder::getCompressionStats() const {
+    auto current_time = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(current_time - start_time_);
+    
+    std::string stats = "ANCF Compression Statistics:\n";
+    stats += "  Encoding Operations: " + std::to_string(encoding_operations_) + "\n";
+    stats += "  Total Original Size: " + std::to_string(total_original_bytes_ / (1024 * 1024)) + " MB\n";
+    stats += "  Total Compressed Size: " + std::to_string(total_encoded_bytes_ / (1024 * 1024)) + " MB\n";
+    stats += "  Average Compression Ratio: " + std::to_string(getAverageCompressionRatio()) + "\n";
+    stats += "  Runtime: " + std::to_string(elapsed.count()) + " seconds\n";
+    
+    return stats;
+}
+
+float storm::ANCFEncoder::getAverageCompressionRatio() const {
+    if (encoding_operations_ == 0) return 0.0f;
+    return static_cast<float>(total_original_bytes_) / static_cast<float>(total_encoded_bytes_);
+}
+
+void storm::ANCFEncoder::resetStats() {
+    total_encoded_bytes_ = 0;
+    total_original_bytes_ = 0;
+    encoding_operations_ = 0;
+    start_time_ = std::chrono::high_resolution_clock::now();
+}
+
+void storm::ANCFEncoder::setDictionaryPolicy(DictionarySizePolicy policy) {
+    dict_manager_->setPolicy(policy);
+}
+
+void storm::ANCFEncoder::setCachingEnabled(bool enabled) {
+    enable_caching_ = enabled;
+    if (!enabled) {
+        dict_manager_->clearCache();
+    }
+}
+
+void storm::ANCFEncoder::setOutlierTolerance(float tolerance) {
+    outlier_tolerance_ = tolerance;
+}
+
+/**
+ * Verify that reconstruction is lossless (bit-exact match)
+ */
+bool storm::ANCFEncoder::verifyLossless(const torch::Tensor& original, const torch::Tensor& decoded) {
+    // Check basic properties
+    if (original.sizes() != decoded.sizes()) {
+        return false;
+    }
+    
+    if (original.device() != decoded.device()) {
+        return false;
+    }
+    
+    if (original.dtype() != decoded.dtype()) {
+        return false;
+    }
+    
+    // Ensure tensors are contiguous
+    torch::Tensor orig_cont = original.contiguous();
+    torch::Tensor dec_cont = decoded.contiguous();
+    
+    // Move to CPU for comparison if needed
+    if (orig_cont.is_cuda()) {
+        orig_cont = orig_cont.cpu();
+    }
+    if (dec_cont.is_cuda()) {
+        dec_cont = dec_cont.cpu();
+    }
+    
+    // Get data pointers
+    if (orig_cont.dtype() == torch::kFloat32) {
+        const float* orig_data = orig_cont.data_ptr<float>();
+        const float* dec_data = dec_cont.data_ptr<float>();
+        
+        size_t num_elements = orig_cont.numel();
+        for (size_t i = 0; i < num_elements; ++i) {
+            if (orig_data[i] != dec_data[i]) {
+                return false;
+            }
+        }
+    } else if (orig_cont.dtype() == torch::kFloat16) {
+        const at::Half* orig_data = orig_cont.data_ptr<at::Half>();
+        const at::Half* dec_data = dec_cont.data_ptr<at::Half>();
+        
+        size_t num_elements = orig_cont.numel();
+        for (size_t i = 0; i < num_elements; ++i) {
+            if (orig_data[i] != dec_data[i]) {
+                return false;
+            }
+        }
+    } else {
+        // For other types, use torch's built-in comparison
+        return torch::equal(orig_cont, dec_cont);
+    }
+    
+    return true;
 }
 
 } // namespace storm

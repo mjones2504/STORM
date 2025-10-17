@@ -65,10 +65,11 @@ private:
     DictionarySizePolicy policy_;
     std::unordered_map<int, std::vector<float>> cached_dictionaries_;
     std::mutex cache_mutex_;
+    bool enable_caching_;
     
 public:
-    explicit ANCFDictionaryManager(DictionarySizePolicy policy = DictionarySizePolicy::ADAPTIVE)
-        : policy_(policy) {}
+    explicit ANCFDictionaryManager(DictionarySizePolicy policy = DictionarySizePolicy::ADAPTIVE, bool enable_caching = true)
+        : policy_(policy), enable_caching_(enable_caching) {}
     
     /**
      * Analyze activation sparsity to determine optimal dictionary size
@@ -195,7 +196,7 @@ public:
         bool enable_caching = true,
         bool enable_profiling = true,
         float outlier_tolerance = 1e-6
-    ) : dict_manager_(std::make_unique<ANCFDictionaryManager>(policy)),
+    ) : dict_manager_(std::make_unique<ANCFDictionaryManager>(policy, enable_caching)),
         escape_handler_(std::make_unique<ANCFEscapeHandler>()),
         total_encoded_bytes_(0),
         total_original_bytes_(0),
