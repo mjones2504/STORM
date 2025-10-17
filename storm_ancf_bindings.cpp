@@ -32,11 +32,20 @@ private:
     
 public:
     ANCFEncoderWrapper(
-        storm::DictionarySizePolicy policy = storm::DictionarySizePolicy::ADAPTIVE,
+        int policy = 1,  // Default to ADAPTIVE
         bool enable_caching = true,
         bool enable_profiling = true,
         float outlier_tolerance = 1e-6f
-    ) : encoder_(std::make_unique<storm::ANCFEncoder>(policy, enable_caching, enable_profiling, outlier_tolerance)) {}
+    ) {
+        storm::DictionarySizePolicy enum_policy;
+        switch (policy) {
+            case 0: enum_policy = storm::DictionarySizePolicy::CONSERVATIVE; break;
+            case 1: enum_policy = storm::DictionarySizePolicy::ADAPTIVE; break;
+            case 2: enum_policy = storm::DictionarySizePolicy::AGGRESSIVE; break;
+            default: enum_policy = storm::DictionarySizePolicy::ADAPTIVE; break;
+        }
+        encoder_ = std::make_unique<storm::ANCFEncoder>(enum_policy, enable_caching, enable_profiling, outlier_tolerance);
+    }
     
     /**
      * Encode activation tensor
@@ -89,7 +98,7 @@ public:
         encoded_data.outlier_positions = encoded_dict["outlier_positions"].cast<std::vector<size_t>>();
         encoded_data.dictionary_size = encoded_dict["dictionary_size"].cast<int>();
         encoded_data.escape_code = encoded_dict["escape_code"].cast<int>();
-        encoded_data.original_shape = encoded_dict["original_shape"].cast<torch::TensorShape>();
+        encoded_data.original_shape = encoded_dict["original_shape"].cast<std::vector<int64_t>>();
         encoded_data.compression_ratio = encoded_dict["compression_ratio"].cast<float>();
         
         // Determine target device
@@ -522,7 +531,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             return std::string("CUDA not available - ANCF requires GPU");
         }
         
-        auto device_props = torch::cuda::get_device_properties(0);
+        auto device_props = torch::cuda::get_device_properties(torch::cuda::current_device());
         return std::string("CUDA Device: ") + device_props.name + 
                std::string(", Compute Capability: ") + std::to_string(device_props.major) + 
                std::string(".") + std::to_string(device_props.minor);

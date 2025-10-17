@@ -331,7 +331,7 @@ public:
     torch::Tensor transferCPUToGPU(
         const std::vector<uint8_t>& compressed_data,
         int layer_id,
-        const torch::TensorShape& target_shape,
+        const std::vector<int64_t>& target_shape,
         torch::Device target_device = torch::kCUDA
     );
     
@@ -359,7 +359,7 @@ public:
     std::future<torch::Tensor> asyncTransferCPUToGPU(
         const std::vector<uint8_t>& compressed_data,
         int layer_id,
-        const torch::TensorShape& target_shape,
+        const std::vector<int64_t>& target_shape,
         torch::Device target_device = torch::kCUDA
     );
     
