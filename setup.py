@@ -159,7 +159,6 @@ extensions = []
 # Main STORM extension sources
 storm_sources = [
     "storm_bindings.cpp",
-    "storm_ancf_bindings.cpp",
 ]
 
 # ANCF CUDA sources

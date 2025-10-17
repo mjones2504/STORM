@@ -41,7 +41,7 @@ endif()
 set_property(TARGET storm PROPERTY CXX_STANDARD 17)
 
 # Add PyTorch extension for STORM with ANCF
-pybind11_add_module(storm_cuda storm_bindings.cpp storm_ancf_bindings.cpp)
+pybind11_add_module(storm_cuda storm_bindings.cpp)
 
 # Add CUDA source files
 set_property(SOURCE storm_ancf_kernels.cu PROPERTY LANGUAGE CUDA)

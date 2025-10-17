@@ -8,6 +8,8 @@
 #include <torch/extension.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/numpy.h>
+#include <cuda_runtime.h>
 #include "storm_core.h"
 #include "storm_orchestration.h"
 #include "storm_gemm.h"
@@ -74,6 +76,132 @@ public:
 
     torch::Tensor forward(torch::Tensor input) {
         return input; // Placeholder implementation
+    }
+};
+
+/**
+ * Python wrapper for ANCFEncoder
+ */
+class ANCFEncoderWrapper {
+private:
+    std::unique_ptr<storm::ANCFEncoder> encoder_;
+    
+public:
+    ANCFEncoderWrapper(
+        int policy = 1,  // Default to ADAPTIVE
+        bool enable_caching = true,
+        bool enable_profiling = true,
+        float outlier_tolerance = 1e-6f
+    ) {
+        storm::DictionarySizePolicy enum_policy;
+        switch (policy) {
+            case 0: enum_policy = storm::DictionarySizePolicy::CONSERVATIVE; break;
+            case 1: enum_policy = storm::DictionarySizePolicy::ADAPTIVE; break;
+            case 2: enum_policy = storm::DictionarySizePolicy::AGGRESSIVE; break;
+            default: enum_policy = storm::DictionarySizePolicy::ADAPTIVE; break;
+        }
+        encoder_ = std::make_unique<storm::ANCFEncoder>(enum_policy, enable_caching, enable_profiling, outlier_tolerance);
+    }
+    
+    /**
+     * Encode activation tensor
+     */
+    py::dict encode_activation(py::object activation_tensor, int layer_id = 0) {
+        // Convert Python tensor to torch::Tensor
+        torch::Tensor activation;
+        if (py::isinstance<torch::Tensor>(activation_tensor)) {
+            activation = activation_tensor.cast<torch::Tensor>();
+        } else {
+            throw std::runtime_error("Input must be a PyTorch tensor");
+        }
+        
+        // Ensure tensor is on GPU and contiguous
+        if (!activation.is_cuda()) {
+            activation = activation.cuda();
+        }
+        if (!activation.is_contiguous()) {
+            activation = activation.contiguous();
+        }
+        
+        // Encode using ANCF
+        auto encoded_data = encoder_->encodeActivation(activation, layer_id);
+        
+        // Convert to Python dictionary
+        py::dict result;
+        result["indices"] = py::cast(encoded_data.indices);
+        result["dictionary"] = py::cast(encoded_data.dictionary);
+        result["outliers"] = py::cast(encoded_data.outliers);
+        result["outlier_positions"] = py::cast(encoded_data.outlier_positions);
+        result["dictionary_size"] = encoded_data.dictionary_size;
+        result["escape_code"] = encoded_data.escape_code;
+        result["original_shape"] = py::cast(encoded_data.original_shape);
+        result["compression_ratio"] = encoded_data.compression_ratio;
+        result["encode_time_us"] = encoded_data.encode_time.count();
+        
+        return result;
+    }
+    
+    /**
+     * Decode activation tensor
+     */
+    py::object decode_activation(py::dict encoded_dict, py::object device = py::none()) {
+        // Extract encoded data from dictionary
+        storm::ANCFEncodedData encoded_data;
+        
+        encoded_data.indices = encoded_dict["indices"].cast<std::vector<uint8_t>>();
+        encoded_data.dictionary = encoded_dict["dictionary"].cast<std::vector<float>>();
+        encoded_data.outliers = encoded_dict["outliers"].cast<std::vector<float>>();
+        encoded_data.outlier_positions = encoded_dict["outlier_positions"].cast<std::vector<size_t>>();
+        encoded_data.dictionary_size = encoded_dict["dictionary_size"].cast<int>();
+        encoded_data.escape_code = encoded_dict["escape_code"].cast<int>();
+        encoded_data.original_shape = encoded_dict["original_shape"].cast<std::vector<int64_t>>();
+        encoded_data.compression_ratio = encoded_dict["compression_ratio"].cast<float>();
+        
+        // Determine target device
+        torch::Device target_device = torch::kCUDA;
+        if (!device.is_none()) {
+            if (py::isinstance<torch::Device>(device)) {
+                target_device = device.cast<torch::Device>();
+            } else if (py::isinstance<py::str>(device)) {
+                std::string device_str = device.cast<std::string>();
+                if (device_str == "cuda" || device_str == "cuda:0") {
+                    target_device = torch::kCUDA;
+                } else if (device_str == "cpu") {
+                    target_device = torch::kCPU;
+                } else {
+                    throw std::runtime_error("Unsupported device: " + device_str);
+                }
+            }
+        }
+        
+        // Decode using ANCF
+        auto decoded_tensor = encoder_->decodeActivation(encoded_data, target_device);
+        
+        return py::cast(decoded_tensor);
+    }
+    
+    /**
+     * Get compression statistics
+     */
+    std::string get_compression_stats() {
+        return encoder_->getCompressionStats();
+    }
+    
+    /**
+     * Get average compression ratio
+     */
+    float get_average_compression_ratio() {
+        return encoder_->getAverageCompressionRatio();
+    }
+    
+    /**
+     * Verify lossless reconstruction
+     */
+    bool verify_lossless(py::object original_tensor, py::object decoded_tensor) {
+        torch::Tensor original = original_tensor.cast<torch::Tensor>();
+        torch::Tensor decoded = decoded_tensor.cast<torch::Tensor>();
+        
+        return storm::ANCFEncoder::verifyLossless(original, decoded);
     }
 };
 
@@ -194,8 +322,34 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         if (!torch::cuda::is_available()) {
             return std::string("ANCF requires CUDA - not available");
         }
-        return std::string("ANCF compatible with current CUDA setup");
+        
+        int device_id = c10::cuda::current_device();
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, device_id);
+        return std::string("ANCF compatible with current CUDA setup: ") + prop.name;
     }, "Check ANCF compatibility with current system");
+    
+    // ANCFEncoder wrapper
+    py::class_<ANCFEncoderWrapper>(storm_module, "ANCFEncoder")
+        .def(py::init<int, bool, bool, float>(), 
+             py::arg("policy") = 1, 
+             py::arg("enable_caching") = true, 
+             py::arg("enable_profiling") = true, 
+             py::arg("outlier_tolerance") = 1e-6f)
+        .def("encode_activation", &ANCFEncoderWrapper::encode_activation,
+             py::arg("activation_tensor"), py::arg("layer_id") = 0)
+        .def("decode_activation", &ANCFEncoderWrapper::decode_activation,
+             py::arg("encoded_dict"), py::arg("device") = py::none())
+        .def("get_compression_stats", &ANCFEncoderWrapper::get_compression_stats)
+        .def("get_average_compression_ratio", &ANCFEncoderWrapper::get_average_compression_ratio)
+        .def("verify_lossless", &ANCFEncoderWrapper::verify_lossless,
+             py::arg("original_tensor"), py::arg("decoded_tensor"));
+    
+    // Dictionary size policy enum
+    py::enum_<storm::DictionarySizePolicy>(storm_module, "DictionarySizePolicy")
+        .value("CONSERVATIVE", storm::DictionarySizePolicy::CONSERVATIVE)
+        .value("ADAPTIVE", storm::DictionarySizePolicy::ADAPTIVE)
+        .value("AGGRESSIVE", storm::DictionarySizePolicy::AGGRESSIVE);
     
     // Version information
     storm_module.attr("__version__") = "2.1.0";
