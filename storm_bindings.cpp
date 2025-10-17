@@ -109,10 +109,10 @@ public:
     py::dict encode_activation(py::object activation_tensor, int layer_id = 0) {
         // Convert Python tensor to torch::Tensor
         torch::Tensor activation;
-        if (py::isinstance<torch::Tensor>(activation_tensor)) {
+        try {
             activation = activation_tensor.cast<torch::Tensor>();
-        } else {
-            throw std::runtime_error("Input must be a PyTorch tensor");
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Input must be a PyTorch tensor: " + std::string(e.what()));
         }
         
         // Ensure tensor is on GPU and contiguous
