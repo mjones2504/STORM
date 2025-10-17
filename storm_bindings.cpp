@@ -110,9 +110,18 @@ public:
         // Convert Python tensor to torch::Tensor
         torch::Tensor activation;
         try {
-            activation = activation_tensor.cast<torch::Tensor>();
+            // Try direct cast first
+            if (py::isinstance<torch::Tensor>(activation_tensor)) {
+                activation = activation_tensor.cast<torch::Tensor>();
+                // Debug: Check if tensor is valid
+                if (!activation.defined()) {
+                    throw std::runtime_error("Tensor is not defined after cast");
+                }
+            } else {
+                throw std::runtime_error("Input is not a PyTorch tensor");
+            }
         } catch (const std::exception& e) {
-            throw std::runtime_error("Input must be a PyTorch tensor: " + std::string(e.what()));
+            throw std::runtime_error("Tensor conversion failed: " + std::string(e.what()));
         }
         
         // Ensure tensor is on GPU and contiguous
@@ -124,7 +133,12 @@ public:
         }
         
         // Encode using ANCF
-        auto encoded_data = encoder_->encodeActivation(activation, layer_id);
+        storm::ANCFEncodedData encoded_data;
+        try {
+            encoded_data = encoder_->encodeActivation(activation, layer_id);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("ANCF encoding failed: " + std::string(e.what()));
+        }
         
         // Convert to Python dictionary
         py::dict result;
