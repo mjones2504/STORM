@@ -352,6 +352,17 @@ def test_ancf_encoding():
         print(f"[DEBUG] Tensor device: {activation.device}")
         print(f"[DEBUG] Tensor shape: {activation.shape}")
         
+        # Test basic encoder functionality first
+        print(f"[DEBUG] Testing encoder creation...")
+        print(f"[DEBUG] Encoder type: {type(encoder)}")
+        
+        # Try to get compression stats (should work without encoding)
+        try:
+            stats = encoder.get_compression_stats()
+            print(f"[DEBUG] Compression stats: {stats}")
+        except Exception as e:
+            print(f"[DEBUG] Stats error: {e}")
+        
         # Encode activation
         start_time = time.time()
         encoded_data = encoder.encode_activation(activation, layer_id=0)
