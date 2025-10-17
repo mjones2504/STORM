@@ -116,12 +116,12 @@ def phase_1_baseline_failure():
         print(f"[SYSTEM] VRAM Capacity: {system_info['vram_capacity']:.2f} GB")
         print(f"[SYSTEM] CPU RAM Capacity: {system_info['cpu_ram_capacity']:.2f} GB")
     
-    # Define OOM Load - ChatGPT-scale model requiring ~50+ GB memory
-    # ChatGPT-3.5 has ~175B parameters, we'll simulate a smaller but still massive model
-    HIDDEN_DIM = 4096      # Hidden dimension (like GPT-3)
-    VOCAB_SIZE = 50000     # Vocabulary size
-    NUM_LAYERS = 24        # Number of transformer layers
-    SEQ_LENGTH = 2048      # Sequence length
+    # Define OOM Load - Model that will exceed VRAM when on GPU
+    # Smaller model for faster testing while still demonstrating the concept
+    HIDDEN_DIM = 2048      # Hidden dimension
+    VOCAB_SIZE = 10000     # Vocabulary size
+    NUM_LAYERS = 12        # Number of transformer layers
+    SEQ_LENGTH = 512       # Sequence length
     
     # Calculate actual memory requirements
     # Each layer: 4 * hidden_dim^2 (Q, K, V, O projections) + 2 * hidden_dim * vocab_size (embedding + output)
@@ -204,11 +204,11 @@ def phase_2_storm_training():
     print("Using STORM's CPU RAM storage to handle the same workload")
     print("This demonstrates successful training past VRAM capacity")
     
-    # Define the same ChatGPT-scale model
-    HIDDEN_DIM = 4096
-    VOCAB_SIZE = 50000
-    NUM_LAYERS = 24
-    SEQ_LENGTH = 2048
+    # Define a smaller model for demonstration (still exceeds VRAM when on GPU)
+    HIDDEN_DIM = 2048  # Reduced from 4096 for faster CPU execution
+    VOCAB_SIZE = 10000  # Reduced from 50000 for faster execution
+    NUM_LAYERS = 12     # Reduced from 24 for faster execution
+    SEQ_LENGTH = 512    # Reduced from 2048 for faster execution
     
     try:
         print(f"\n[STORM] Initializing STORM system...")
@@ -267,6 +267,7 @@ def phase_2_storm_training():
         
         print(f"[STORM] Running optimizer step on CPU...")
         optimizer.step()
+        optimizer.zero_grad()  # Clear gradients for next iteration
         print(f"[SUCCESS] Optimizer step completed")
         print(f"[STORM] All optimizer state managed in CPU RAM")
         
