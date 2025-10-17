@@ -2,6 +2,7 @@
 #include <torch/extension.h>
 #include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
+#include <cuda_runtime.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
@@ -531,9 +532,11 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             return std::string("CUDA not available - ANCF requires GPU");
         }
         
-        auto device_props = torch::cuda::get_device_properties(torch::cuda::current_device());
-        return std::string("CUDA Device: ") + device_props.name + 
-               std::string(", Compute Capability: ") + std::to_string(device_props.major) + 
-               std::string(".") + std::to_string(device_props.minor);
+        int device_id = c10::cuda::current_device();
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, device_id);
+        return std::string("CUDA Device: ") + prop.name + 
+               std::string(", Compute Capability: ") + std::to_string(prop.major) + 
+               std::string(".") + std::to_string(prop.minor);
     });
 }
